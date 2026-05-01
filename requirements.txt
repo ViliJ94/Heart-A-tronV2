@@ -1,0 +1,14 @@
+# PC Companion Application Requirements
+# Install with: pip install -r requirements.txt
+
+# MQTT Python client
+paho-mqtt==1.6.1
+
+# Tkinter is included with Python standard library
+# But on some Linux systems, you may need to install separately:
+# Ubuntu/Debian: sudo apt-get install python3-tk
+# Fedora: sudo dnf install python3-tkinter
+# macOS: Usually pre-installed with Python
+
+# Optional logging enhancement
+colorama==0.4.6

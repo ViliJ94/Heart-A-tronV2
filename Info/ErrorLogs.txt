@@ -1,0 +1,178 @@
+============================================================
+PICO W PROJECT - ERROR / DEBUG LOG
+============================================================
+
+PROJECT:
+Pico Heart Rate Monitoring System (MicroPython)
+
+DEVICE:
+Raspberry Pi Pico W (COM9)
+
+HOST:
+Windows 10/11 (PowerShell + mpremote)
+
+============================================================
+1. MPREMOTE INSTALL / FILE TRANSFER ISSUES
+============================================================
+
+ERROR:
+mpremote cp fails with:
+"No such file or directory"
+
+OBSERVED:
+- Files DO exist on PC:
+  Code/classes/display_manager.py ✔
+  Code/classes/sensor_manager.py ✔
+  Code/classes/wifi_manager.py ✔
+  etc.
+
+BUT:
+mpremote cannot consistently resolve relative paths
+
+LIKELY CAUSES:
+- incorrect working directory context
+- Windows path resolution mismatch
+- missing quotes or relative path confusion
+
+============================================================
+2. MPREMOTE SERIAL CONNECTION FAILURE
+============================================================
+
+ERROR:
+serial.serialutil.SerialException:
+ClearCommError failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+
+MEANING:
+- USB serial communication unstable
+- COM port handshake interrupted during raw REPL mode
+- Pico reset or crash during mpremote operation
+
+============================================================
+3. COM PORT DETECTION BEHAVIOR
+============================================================
+
+OBSERVED STATES:
+
+Initial:
+COM7 None
+COM8 None
+
+Stable detection:
+COM9 E663AC91D381752E 2e8a:0005
+
+INTERMITTENT ISSUE:
+- COM9 disappears and reappears
+- connection unstable during execution
+
+============================================================
+4. REPL BEHAVIOR ISSUE
+============================================================
+
+OBSERVED:
+
+mpremote connect COM9 repl
+→ connects successfully
+
+BUT:
+- user cannot type input
+- system prints:
+
+  [NTP ERROR] Time sync failed: -2
+  [PATIENT] Waiting for patient name input...
+
+INTERPRETATION:
+- main.py auto-starts on boot
+- program enters blocking loop
+- REPL input is consumed / blocked by running program
+
+============================================================
+5. OLED / DISPLAY ISSUE
+============================================================
+
+OBSERVED:
+- OLED screen remains blank
+
+LIKELY CAUSES:
+- display_manager not initialized
+- I2C failure (address mismatch or wiring issue)
+- startup sequence never reaches OLED update
+- system blocked before display.show()
+
+============================================================
+6. SYSTEM BOOT FAILURE MODE
+============================================================
+
+CURRENT BOOT FLOW (inferred):
+
+boot →
+wifi init →
+NTP sync failure →
+patient input loop →
+system blocks →
+USB instability / REPL lock
+
+RESULT:
+- system runs but is unresponsive
+- display remains blank
+- mpremote unstable
+
+============================================================
+7. ROOT CAUSE SUMMARY
+============================================================
+
+PRIMARY ISSUE:
+Blocking infinite loop in main.py (startup state machine)
+
+SECONDARY ISSUE:
+USB serial instability caused by Pico resetting during execution
+
+TERTIARY ISSUE:
+mpremote path resolution inconsistencies (Windows environment)
+
+============================================================
+8. CURRENT SYSTEM STATE
+============================================================
+
+Pico:
+- detected ✔ (COM9)
+- MicroPython installed ✔
+- REPL partially accessible ✔
+
+Filesystem:
+- unclear / inconsistent due to deployment issues
+
+Runtime:
+- main.py auto-executes on boot ✔
+- blocks REPL input ✔
+
+============================================================
+9. REQUIRED FIX STRATEGY
+============================================================
+
+STEP 1:
+Replace main.py with minimal safe boot:
+    print("SAFE BOOT")
+
+STEP 2:
+Reset Pico and verify stable REPL:
+    mpremote connect COM9 repl
+
+STEP 3:
+Verify filesystem stability:
+    mpremote connect COM9 ls -r
+
+STEP 4:
+Reintroduce modules gradually:
+    - disable WiFi init
+    - disable OLED init
+    - test sensor separately
+
+STEP 5:
+Fix startup architecture:
+    - remove blocking loops from boot
+    - add safe_mode flag
+    - ensure REPL is always accessible
+
+============================================================
+END OF LOG
+============================================================

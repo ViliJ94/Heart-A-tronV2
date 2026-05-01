@@ -1,0 +1,98 @@
+flowchart TD
+
+%% ================= START =================
+
+A[Power ON] --> B[Init System]
+B --> B1[Init OLED + LED]
+B1 --> B2[Init WiFi]
+B2 --> B3[NTP Sync Time]
+B3 --> B4[Init PIO + FIFO (250Hz)]
+B4 --> T[Transition State]
+
+T --> C[Main Menu (GUI with icons + animations)]
+
+C --> D{Select option}
+
+D -->|Measure HR| M0[Measurement Mode]
+D -->|Basic HRV| H0[Local HRV Mode]
+D -->|History| HS0[History Mode]
+D -->|Kubios| K0[Kubios Mode]
+
+%% ================= MEASUREMENT =================
+
+M0 --> M1{Start / Stop}
+M1 -->|Start| M2[MeasurementState True]
+M1 -->|Stop| T
+
+M2 --> M3[PIO sampling 250Hz → FIFO]
+M3 --> M4[Read FIFO → rolling buffer]
+
+M4 --> M5[Display live PPG waveform]
+
+M4 --> M6[Signal processing]
+M6 --> M7[Peak detection]
+
+M7 --> M8[Toggle LED (heartbeat)]
+
+M7 --> M9[RR calculation]
+M9 --> M10[Compute BPM]
+
+M10 --> M11[Update BPM every ≤5s]
+M11 --> M1
+
+%% ================= LOCAL HRV =================
+
+H0 --> H1[Collect ≥30s RR data]
+H1 --> H2[Mean PPI]
+H2 --> H3[Mean HR]
+H3 --> H4[RMSSD]
+H4 --> H5[SDNN]
+
+H5 --> H6[Display HRV results]
+
+H6 --> H7[MQTT send (WiFi + patient name)]
+
+H7 --> T
+
+%% ================= KUBIOS =================
+
+K0 --> K1[FirstSampleFlag = True]
+
+K1 --> K2[Collect ≥30s RR data]
+K2 --> K3[Send to Kubios Cloud]
+K3 --> K4[Wait for response (non-blocking)]
+K4 --> K5[Receive HRV / stress / BPM]
+
+K5 --> K6{FirstSampleFlag?}
+
+K6 -->|True| K7[Store Result 1]
+K7 --> K8[Show message: Take second measurement]
+K8 --> K9[FirstSampleFlag = False]
+K9 --> K2
+
+K6 -->|False| K10[Store Result 2]
+
+%% ================= COMPARISON =================
+
+K10 --> W[Comparing State]
+
+W --> W1[Compare results]
+W1 --> W2[Generate comparison JSON]
+
+W2 --> W3[Save session (≥3 entries, overwrite oldest)]
+W3 --> W4[Attach NTP timestamp]
+
+W4 --> T
+
+%% ================= HISTORY =================
+
+HS0 --> HS1[Load JSON storage]
+
+HS1 --> HS2[Show list (≥3 entries)]
+
+HS2 --> HS3[Select entry]
+
+HS3 --> HS4[Display HRV + comparison data]
+
+HS4 --> HS5{Return}
+HS5 -->|Yes| C
