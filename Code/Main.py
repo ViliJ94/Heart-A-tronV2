@@ -213,6 +213,17 @@ class HRMonitoringSystem:
     
     def _handle_kubios_state(self):
         """Handle Kubios Cloud integration"""
+        # connect to WiFi before starting Kubios
+        if self.state_machine.state_changed:
+            self.display.show_message("Connecting WiFi")
+
+            if not self.wifi.is_connected():
+                success = self.wifi.connect_wifi()
+                if not success:
+                    self.display.show_error_message("No WiFi connection", duration=2)
+                    self.state_machine.change_state("MENU")
+                    return
+
         if self.state_machine.state_changed:
             self.display.show_kubios_screen()
             self.measurement.start_measurement()

@@ -54,8 +54,8 @@ class WiFiManager:
         self.password = self.PASSWORD
         self._load_config()
 
-        self._init_wifi()
-        self._init_mqtt()
+        #self._init_wifi() these two not needed on startup
+        #self._init_mqtt()
     
     def _load_config(self):
         """Load runtime configuration from config.py when available."""
