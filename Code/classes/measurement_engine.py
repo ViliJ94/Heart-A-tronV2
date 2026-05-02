@@ -16,7 +16,7 @@ class MeasurementEngine:
         self.sensor = sensor_manager
         self.sample_rate = getattr(cfg, "SAMPLE_RATE_HZ", 250)
         self.sample_period_ms = max(1, int(1000 / self.sample_rate))
-        self.min_peak_distance = getattr(cfg, "MIN_PEAK_DISTANCE_SAMPLES", 30)
+        self.min_peak_distance = getattr(cfg, "MIN_PEAK_DISTANCE_SAMPLES", 75)
         self.min_peak_height = getattr(cfg, "MIN_PEAK_HEIGHT", 100)
         self.min_hr = getattr(cfg, "MIN_HEART_RATE_BPM", 40)
         self.max_hr = getattr(cfg, "MAX_HEART_RATE_BPM", 200)
