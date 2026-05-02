@@ -4,6 +4,7 @@ import time
 import json
 import network
 from machine import RTC
+import socket
 
 try:
     from umqtt.simple import MQTTClient
@@ -63,26 +64,40 @@ class WiFiManager:
         if self.mqtt_client or MQTTClient is None:
             return
         try:
+            # Avoid getting stuck when broker is unreachable
+            try:
+                socket.setdefaulttimeout(3)
+            except Exception:
+                pass
+            print("[MQTT] connecting to %s:%s as %s" % (self.mqtt_broker, self.mqtt_port, self.device_id))
             self.mqtt_client = MQTTClient(self.device_id, self.mqtt_broker, port=self.mqtt_port, keepalive=60)
             self.mqtt_client.set_callback(self._on_mqtt_message)
             self.mqtt_client.connect()
             self.mqtt_client.subscribe(self.topic_patient)
             self.mqtt_client.subscribe(self.topic_kubios)
+            print("[MQTT] subscribed:", self.topic_patient, self.topic_kubios)
         except Exception as exc:
             print("[MQTT] init failed:", exc)
             self.mqtt_client = None
+        finally:
+            try:
+                socket.setdefaulttimeout(None)
+            except Exception:
+                pass
 
     def _on_mqtt_message(self, topic, msg):
         """Callback invoked by umqtt when a message arrives."""
         try:
             topic_str = topic.decode()
             msg_str = msg.decode()
+            print("[MQTT] rx topic=%s msg=%s" % (topic_str, msg_str))
             if topic_str == self.topic_patient:
                 # Expected format: "PATIENT:<name>"
                 if msg_str.startswith("PATIENT:"):
                     self.patient_name_received = msg_str[len("PATIENT:"):].strip()
                 else:
                     self.patient_name_received = msg_str.strip()
+                print("[MQTT] patient_name_received:", self.patient_name_received)
             elif topic_str == self.topic_kubios:
                 payload = json.loads(msg_str)
                 self._kubios_last_response = payload
@@ -95,7 +110,9 @@ class WiFiManager:
             return None
         try:
             self.mqtt_client.check_msg()
-        except Exception:
+        except Exception as exc:
+            # Useful when sockets time out / broker disconnects
+            print("[MQTT] check_msg error:", exc)
             pass
         name = self.patient_name_received
         self.patient_name_received = None

@@ -115,14 +115,16 @@ STEP 5: SETUP PC COMPANION APP
 
 2. Install required packages:
    pip install -r requirements.txt
-   
-   Or manually:
-   pip install paho-mqtt==1.6.1
 
-3. Run the companion application:
+3. Install and run a Mosquitto broker (and CLI tools):
+   - Install Mosquitto for your OS (includes mosquitto_pub/mosquitto_sub)
+   - Ensure port 1883 is open on your network
+   - Start the broker (service or manual)
+
+4. Run the companion application:
    python PC_Companion_App.py
 
-4. Expected behavior:
+5. Expected behavior:
    ├─ Window opens with "Waiting for connection..."
    ├─ After few seconds: "Connected" (green)
    ├─ Enter patient name

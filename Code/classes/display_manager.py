@@ -1,6 +1,7 @@
 """OLED display helper with simple, predictable screens."""
 
 import machine
+import time
 
 try:
     from ssd1306 import SSD1306_I2C
@@ -23,15 +24,28 @@ class DisplayManager:
         width = getattr(cfg, "OLED_WIDTH", 128)
         height = getattr(cfg, "OLED_HEIGHT", 64)
         i2c_no = getattr(cfg, "I2C_NUMBER", 1)
+        addr = getattr(cfg, "OLED_ADDRESS", 0x3C)
         self.display = None
         self.width = width
         self.height = height
         try:
             if SSD1306_I2C:
+                print("[DISPLAY] init i2c_no=%s scl=%s sda=%s freq=%s addr=0x%02X" % (i2c_no, scl, sda, freq, int(addr)))
                 i2c = machine.I2C(i2c_no, scl=machine.Pin(scl), sda=machine.Pin(sda), freq=freq)
-                self.display = SSD1306_I2C(width, height, i2c)
+                try:
+                    addrs = i2c.scan()
+                    print("[DISPLAY] i2c scan:", addrs)
+                except Exception as exc:
+                    print("[DISPLAY] i2c scan failed:", exc)
+                    addrs = []
+                self.display = SSD1306_I2C(width, height, i2c, addr=int(addr))
+                print("[DISPLAY] init ok")
         except Exception as exc:
             print("[DISPLAY] init failed:", exc)
+
+        # State for history UI
+        self._history_entries = []
+        self._history_selected = 0
 
     def _clear(self):
         if self.display:
@@ -52,7 +66,81 @@ class DisplayManager:
         self._line(line3, 0, 40)
         self._show()
 
-    def show_main_menu(self, options, selected):
+    # -------------------------------------------------------------------------
+    # Compatibility wrappers (Main.py expects these names)
+    # -------------------------------------------------------------------------
+
+    def show_init_message(self, line1="Initializing...", line2="Please wait"):
+        self.show_message(line1, line2)
+
+    def show_waiting_screen(self, text):
+        parts = str(text).split("\n")
+        self.show_message(parts[0] if len(parts) > 0 else "", parts[1] if len(parts) > 1 else "", parts[2] if len(parts) > 2 else "")
+
+    def show_success_message(self, text, duration=1):
+        self.show_waiting_screen(text)
+        try:
+            time.sleep(max(0, float(duration)))
+        except Exception:
+            pass
+
+    def show_warning_message(self, text, duration=1):
+        self.show_waiting_screen(text)
+        try:
+            time.sleep(max(0, float(duration)))
+        except Exception:
+            pass
+
+    def show_error_message(self, text, duration=2):
+        self.show_waiting_screen(text)
+        try:
+            time.sleep(max(0, float(duration)))
+        except Exception:
+            pass
+
+    def show_main_menu(self, selected):
+        options = ["Measure HR", "HRV Analysis", "Kubios", "History"]
+        try:
+            idx = int(selected) % len(options)
+        except Exception:
+            idx = 0
+        # reuse existing renderer
+        self.show_main_menu_options(options, idx)
+
+    def show_measurement_mode(self):
+        self.show_message("MEASURE HR", "Collecting...", "SW=Stop/Back")
+
+    def update_heart_rate_display(self, bpm):
+        self.show_message("MEASURE HR", "BPM: %s" % bpm, "SW=Stop/Back")
+
+    def show_hrv_collection_screen(self):
+        self.show_message("HRV", "Collecting 30s", "Please wait")
+
+    def update_collection_progress(self, bpm, progress):
+        try:
+            pct = int(progress)
+        except Exception:
+            pct = 0
+        self.show_collection("HRV", bpm, pct, "Collecting")
+
+    def show_kubios_screen(self):
+        self.show_message("KUBIOS", "Collecting 30s", "Please wait")
+
+    def show_history_menu(self, history_entries):
+        self._history_entries = history_entries or []
+        self._history_selected = 0
+        self.show_history(self._history_entries, self._history_selected)
+
+    def get_selected_history_entry(self):
+        if not self._history_entries:
+            return None
+        try:
+            return self._history_entries[self._history_selected]
+        except Exception:
+            return self._history_entries[0]
+
+    # Backwards compatible renderer used by the wrapper above
+    def show_main_menu_options(self, options, selected):
         self._clear()
         self._line("MAIN MENU", 0, 0)
         i = 0

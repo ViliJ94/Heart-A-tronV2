@@ -1,8 +1,9 @@
 # PC Companion Application Requirements
 # Install with: pip install -r requirements.txt
 
-# MQTT Python client
-paho-mqtt==1.6.1
+# MQTT:
+# This project uses a Mosquitto broker, and the PC companion uses the Mosquitto CLI
+# tools (mosquitto_pub / mosquitto_sub) instead of a Python MQTT library.
 
 # Tkinter is included with Python standard library
 # But on some Linux systems, you may need to install separately:

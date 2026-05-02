@@ -1,6 +1,7 @@
 # Network & WiFi Configuration
 
 This folder contains network configuration details for WiFi and MQTT communication.
+The project uses a **Mosquitto** MQTT broker (port 1883 by default).
 
 ## Contents
 
@@ -8,7 +9,7 @@ This folder contains network configuration details for WiFi and MQTT communicati
 |------|-------|
 | WiFi SSID | KMD652_Group4 |
 | WiFi Password | Group_4isDaBestest! |
-| MQTT Broker IP | 192.168.4.153 |
+| MQTT Broker IP | 192.168.4.253 |
 | MQTT Port | 1883 |
 | NTP Server | 0.pool.ntp.org |
 
@@ -29,6 +30,11 @@ This folder contains network configuration details for WiFi and MQTT communicati
 4. Run PC Companion App: `python PC_Companion_App.py`
 5. Ensure app shows "Connected" status
 6. Send patient name to Pico
+
+## Mosquitto notes
+
+- **Broker**: run Mosquitto on the machine at `MQTT_BROKER_IP` (or change it in `CONFIG.py`)
+- **PC Companion**: uses `mosquitto_pub`/`mosquitto_sub` (make sure they’re on your PATH)
 
 ## Troubleshooting
 

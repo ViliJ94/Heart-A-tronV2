@@ -6,6 +6,13 @@ Run tests to ensure all components are working correctly
 import os
 import sys
 
+# Ensure Windows consoles don't crash on box-drawing characters
+try:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 # ANSI color codes
 GREEN = '\033[92m'
 RED = '\033[91m'
@@ -118,7 +125,7 @@ class SystemTester:
         
         pc_dependencies = {
             "tkinter": "GUI framework",
-            "paho.mqtt": "MQTT client"
+            "subprocess": "Used to run mosquitto_pub/sub (standard library)"
         }
         
         for module, description in pc_dependencies.items():
@@ -127,6 +134,18 @@ class SystemTester:
                 self.print_test(f"{module}", "PASS", description)
             except ImportError:
                 self.print_test(f"{module}", "FAIL", f"Not installed - run: pip install {module}")
+
+        # Verify Mosquitto CLI tools are available on PATH
+        try:
+            import shutil
+            has_pub = shutil.which("mosquitto_pub") is not None
+            has_sub = shutil.which("mosquitto_sub") is not None
+            if has_pub and has_sub:
+                self.print_test("mosquitto_pub/sub", "PASS", "Mosquitto CLI available on PATH")
+            else:
+                self.print_test("mosquitto_pub/sub", "FAIL", "Install Mosquitto and add it to PATH")
+        except Exception as e:
+            self.print_test("mosquitto_pub/sub", "WARN", str(e))
     
     # ─────────────────────────────────────────────────────────────────────────
     # CODE QUALITY TESTS

@@ -32,7 +32,7 @@ PicoProject/
 │
 ├── 📄 PC_COMPANION_APP.PY                  [PC Tkinter application - 350 lines]
 │   Purpose: GUI for patient name input, WiFi status, MQTT communication
-│   Requires: paho-mqtt, tkinter
+│   Requires: Mosquitto CLI tools (mosquitto_pub/sub), tkinter
 │   Run with: python PC_Companion_App.py
 │
 ├── 📄 deploy_to_pico.py                    [Automated deployment tool - 250 lines]
@@ -57,7 +57,7 @@ PicoProject/
 │
 ├── 📄 requirements.txt                     [Python dependencies - 5 lines]
 │   Purpose: PC application dependencies
-│   Contains: paho-mqtt==1.6.1 and optional packages
+│   Contains: optional Python packages (Mosquitto broker + CLI tools installed separately)
 │   Usage: pip install -r requirements.txt
 │
 ├── 📄 README.md                            [Complete documentation - 400 lines]

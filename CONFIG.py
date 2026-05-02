@@ -19,7 +19,7 @@ NTP_TIMEZONE_OFFSET = 1  # UTC+1 for Central European Time
 # MQTT CONFIGURATION
 # ─────────────────────────────────────────────────────────────────────────────
 
-MQTT_BROKER_IP = "192.168.4.153"
+MQTT_BROKER_IP = "192.168.4.253"
 MQTT_BROKER_PORT = 1883
 
 # MQTT Topics
@@ -31,6 +31,10 @@ MQTT_TOPIC_DEVICE_STATUS = "device/status"
 # Optional: MQTT Authentication (leave empty if no auth required)
 MQTT_USERNAME = ""
 MQTT_PASSWORD = ""
+
+# Optional (PC Companion): if Mosquitto CLI isn't on PATH, set the folder that contains
+# mosquitto_pub.exe and mosquitto_sub.exe, e.g. r"C:\Program Files\mosquitto"
+MOSQUITTO_BIN_DIR = ""
 
 # ─────────────────────────────────────────────────────────────────────────────
 # KUBIOS CLOUD CONFIGURATION

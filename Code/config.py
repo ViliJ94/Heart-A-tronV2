@@ -9,7 +9,7 @@ except ImportError:
     # Fallback defaults used on device if CONFIG.py is not present.
     WIFI_SSID = ""
     WIFI_PASSWORD = ""
-    MQTT_BROKER_IP = "192.168.4.153"
+    MQTT_BROKER_IP = "192.168.4.253"
     MQTT_BROKER_PORT = 1883
     MQTT_TOPIC_HRV_DATA = "hrv/data"
     MQTT_TOPIC_PATIENT_NAME = "patient/name"

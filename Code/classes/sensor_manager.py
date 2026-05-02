@@ -73,6 +73,45 @@ class SensorManager:
                         events.append("NEXT")
         return events
 
+    # -------------------------------------------------------------------------
+    # Compatibility wrappers (Main.py expects these names / semantics)
+    # -------------------------------------------------------------------------
+
+    def get_button_input(self):
+        """
+        Return a single high-level action string or None.
+
+        Main.py expects: SELECT, UP, DOWN, BACK, STOP in different screens.
+        We map physical buttons:
+          SW0 -> SELECT
+          SW1 -> UP (also used as STOP/BACK depending on screen)
+          SW2 -> DOWN
+        """
+        events = self.poll_buttons()
+        if not events:
+            return None
+        # prefer SELECT if present
+        if "SELECT" in events:
+            return "SELECT"
+        # poll_buttons emits BACK for SW1 and NEXT for SW2; map to UP/DOWN
+        if "BACK" in events:
+            return "UP"
+        if "NEXT" in events:
+            return "DOWN"
+        return events[0]
+
+    def get_all_sensor_values(self):
+        """Best-effort snapshot used by Main.py debug prints."""
+        try:
+            buttons = {
+                "BTN0": self.buttons["SW0"].value(),
+                "BTN1": self.buttons["SW1"].value(),
+                "BTN2": self.buttons["SW2"].value(),
+            }
+        except Exception:
+            buttons = {}
+        return {"buttons": buttons, "ppg": self.get_ppg_sample()}
+
     def get_ppg_sample(self):
         return self.adc.read_u16() if self.adc else 0
 

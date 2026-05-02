@@ -2,25 +2,86 @@
 PC Companion Application - Patient Name Input Interface
 Tkinter-based GUI for sending patient information to Pico via MQTT
 
-Requirements: pip install paho-mqtt
+Requires a running Mosquitto broker and the Mosquitto CLI tools:
+  - mosquitto_pub
+  - mosquitto_sub
 """
 
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
-import paho.mqtt.client as mqtt
 import threading
 import time
 from datetime import datetime
+import subprocess
+import shutil
+import os
+import json as _json
+import socket
+
+try:
+    import CONFIG as cfg  # project-wide config (preferred)
+except Exception:
+    cfg = None
+
+
+def _agent_dbg(hypothesis_id, location, message, data=None, run_id="pre-fix"):
+    """Append NDJSON debug line to debug-3d63e7.log (no secrets)."""
+    try:
+        log_path = os.path.join(os.path.dirname(__file__), "debug-3d63e7.log")
+        payload = {
+            "sessionId": "3d63e7",
+            "runId": run_id,
+            "hypothesisId": hypothesis_id,
+            "location": location,
+            "message": message,
+            "data": data or {},
+            "timestamp": int(time.time() * 1000),
+        }
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(_json.dumps(payload, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
+def _resolve_mosquitto_cli(exe_name):
+    """
+    Resolve mosquitto_pub/sub executable path.
+    Prefer PATH; otherwise try common Windows install locations.
+    """
+    p = shutil.which(exe_name)
+    if p:
+        return p
+    candidates = []
+    # Allow explicit override via CONFIG.py (PC-side only)
+    try:
+        bin_dir = getattr(cfg, "MOSQUITTO_BIN_DIR", "") if cfg else ""
+        if bin_dir:
+            candidates.append(os.path.join(str(bin_dir), exe_name + ".exe"))
+            candidates.append(os.path.join(str(bin_dir), exe_name))
+    except Exception:
+        pass
+    # Common Windows installer location
+    candidates.append(os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"), "mosquitto", exe_name + ".exe"))
+    candidates.append(os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"), "Mosquitto", exe_name + ".exe"))
+    # Chocolatey typical bin (if user installed it that way)
+    candidates.append(os.path.join(os.environ.get("ChocolateyInstall", r"C:\ProgramData\chocolatey"), "bin", exe_name + ".exe"))
+    for c in candidates:
+        try:
+            if os.path.exists(c):
+                return c
+        except Exception:
+            continue
+    return None
 
 
 class PicoCompanionApp:
     """Main application window for Pico companion app"""
     
     # MQTT Configuration (must match Pico settings)
-    MQTT_BROKER = "192.168.4.153"
-    MQTT_PORT = 1883
-    MQTT_TOPIC_PATIENT_NAME = "patient/name"
-    MQTT_TOPIC_DEVICE_STATUS = "device/status"
+    MQTT_BROKER = getattr(cfg, "MQTT_BROKER_IP", "127.0.0.1") if cfg else "127.0.0.1"
+    MQTT_PORT = int(getattr(cfg, "MQTT_BROKER_PORT", 1883)) if cfg else 1883
+    MQTT_TOPIC_PATIENT_NAME = getattr(cfg, "MQTT_TOPIC_PATIENT_NAME", "patient/name") if cfg else "patient/name"
+    MQTT_TOPIC_DEVICE_STATUS = getattr(cfg, "MQTT_TOPIC_DEVICE_STATUS", "device/status") if cfg else "device/status"
     
     def __init__(self, root):
         """Initialize the companion application"""
@@ -29,9 +90,12 @@ class PicoCompanionApp:
         self.root.geometry("600x500")
         self.root.configure(bg="#f0f0f0")
         
-        # MQTT client
-        self.mqtt_client = None
+        # Mosquitto subprocess handles
+        self._sub_process = None
+        self._sub_thread = None
+        self._stop_event = threading.Event()
         self.connected = False
+        self._connected_once = False
         
         # Create UI
         self._create_ui()
@@ -112,52 +176,140 @@ class PicoCompanionApp:
         info_label.pack(pady=10)
     
     def _connect_mqtt(self):
-        """Connect to MQTT broker in background thread"""
+        """Connect to MQTT broker in background thread (Mosquitto CLI)."""
         thread = threading.Thread(target=self._mqtt_connect_thread, daemon=True)
         thread.start()
     
     def _mqtt_connect_thread(self):
-        """Background thread for MQTT connection"""
+        """Background thread for MQTT connection (starts mosquitto_sub)."""
         try:
-            self.mqtt_client = mqtt.Client("pico_companion_app")
-            self.mqtt_client.on_connect = self._on_mqtt_connect
-            self.mqtt_client.on_disconnect = self._on_mqtt_disconnect
-            self.mqtt_client.on_message = self._on_mqtt_message
-            
-            self._log_message("Connecting to MQTT broker...")
-            self.mqtt_client.connect(self.MQTT_BROKER, self.MQTT_PORT, keepalive=60)
-            self.mqtt_client.loop_start()
-            
+            # #region agent log
+            path_env = os.environ.get("PATH", "")
+            path_parts = [p for p in path_env.split(os.pathsep) if p]
+            # keep it non-sensitive: only count + last segment names
+            safe_path = {"count": len(path_parts), "tail": [p[-60:] for p in path_parts[-5:]]}
+            which_sub = _resolve_mosquitto_cli("mosquitto_sub")
+            which_pub = _resolve_mosquitto_cli("mosquitto_pub")
+            _agent_dbg(
+                "H2",
+                "PC_Companion_App.py:_mqtt_connect_thread",
+                "mosquitto_cli_presence",
+                {
+                    "which_sub": which_sub,
+                    "which_pub": which_pub,
+                    "path": safe_path,
+                    "cwd": os.getcwd(),
+                    "broker": str(self.MQTT_BROKER),
+                    "port": int(self.MQTT_PORT),
+                },
+            )
+            # #endregion
+
+            if not which_sub or not which_pub:
+                raise RuntimeError(
+                    "Mosquitto CLI not found. Install Mosquitto and ensure mosquitto_sub/mosquitto_pub are on PATH."
+                )
+
+            # Extra debug to understand connectivity failures
+            self._log_message(f"[MQTT DEBUG] broker={self.MQTT_BROKER} port={self.MQTT_PORT}")
+            self._log_message(f"[MQTT DEBUG] mosquitto_sub={which_sub}")
+            self._log_message(f"[MQTT DEBUG] mosquitto_pub={which_pub}")
+            try:
+                socket.create_connection((str(self.MQTT_BROKER), int(self.MQTT_PORT)), timeout=2).close()
+                self._log_message("[MQTT DEBUG] TCP probe: OK")
+            except Exception as exc:
+                self._log_message(f"[MQTT DEBUG] TCP probe failed: {exc}")
+
+            self._log_message("Starting Mosquitto subscription (device status)...")
+
+            # Subscribe continuously to device status; we treat 'sub running' as connected.
+            # Use text mode for easier line parsing on Windows.
+            sub_cmd = [
+                which_sub,
+                "-h", str(self.MQTT_BROKER),
+                "-p", str(self.MQTT_PORT),
+                "-t", str(self.MQTT_TOPIC_DEVICE_STATUS),
+                "-v",
+            ]
+            self._log_message("[MQTT DEBUG] sub cmd: " + " ".join(map(str, sub_cmd)))
+            self._sub_process = subprocess.Popen(
+                sub_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+            )
+
+            # If mosquitto_sub exits immediately, surface the exit code quickly.
+            try:
+                time.sleep(0.2)
+                rc = self._sub_process.poll()
+                if rc is not None:
+                    self._log_message(f"[MQTT DEBUG] mosquitto_sub exited early rc={rc}", "error")
+            except Exception:
+                pass
+
+            # Do NOT mark connected yet. We mark connected only after receiving
+            # at least one message, which proves broker reachability.
+            self.connected = False
+            self._connected_once = False
+            self.root.after(100, lambda: self.send_button.config(state=tk.DISABLED))
+            self._log_message("[MQTT DEBUG] Waiting for first message to confirm connection...")
+
+            self._sub_thread = threading.Thread(target=self._mosquitto_sub_reader, daemon=True)
+            self._sub_thread.start()
         except Exception as e:
             self._log_message(f"MQTT Connection Error: {e}", "error")
     
-    def _on_mqtt_connect(self, client, userdata, flags, rc):
-        """MQTT connection callback"""
-        if rc == 0:
-            self.connected = True
-            self._log_message("✓ Connected to MQTT broker")
-            
-            # Subscribe to device status
-            self.mqtt_client.subscribe(self.MQTT_TOPIC_DEVICE_STATUS)
-            
-            # Enable send button
-            self.root.after(100, lambda: self.send_button.config(state=tk.NORMAL))
-        else:
-            self._log_message(f"Connection failed with code {rc}", "error")
-    
-    def _on_mqtt_disconnect(self, client, userdata, rc):
-        """MQTT disconnection callback"""
-        self.connected = False
-        self._log_message(f"Disconnected from MQTT (code {rc})")
-        self.send_button.config(state=tk.DISABLED)
-    
-    def _on_mqtt_message(self, client, userdata, msg):
-        """Handle incoming MQTT messages"""
+    def _mosquitto_sub_reader(self):
+        """Read lines from mosquitto_sub and append to UI log."""
         try:
-            message = msg.payload.decode()
-            self._log_message(f"Device: {message}")
+            if not self._sub_process or not self._sub_process.stdout:
+                return
+            for line in self._sub_process.stdout:
+                if self._stop_event.is_set():
+                    break
+                line = (line or "").strip()
+                if not line:
+                    continue
+
+                # Some failures are printed to stdout/stderr; surface them and keep disconnected.
+                lower = line.lower()
+                if ("error:" in lower) or ("connection refused" in lower) or ("not authorised" in lower) or ("timed out" in lower):
+                    self._log_message("[MQTT DEBUG] sub output: " + line, "error")
+                    continue
+
+                # First non-error line implies we are receiving messages via broker.
+                if not self._connected_once:
+                    self._connected_once = True
+                    self.connected = True
+                    try:
+                        self.root.after(0, lambda: self.send_button.config(state=tk.NORMAL))
+                    except Exception:
+                        pass
+                    self._log_message("✓ Connected (confirmed by incoming message)")
+
+                # mosquitto_sub -v prints: "<topic> <payload>"
+                if line.startswith(self.MQTT_TOPIC_DEVICE_STATUS + " "):
+                    payload = line[len(self.MQTT_TOPIC_DEVICE_STATUS) + 1 :]
+                else:
+                    payload = line
+                self._log_message(f"Device: {payload}")
         except Exception as e:
-            self._log_message(f"Error decoding message: {e}", "error")
+            self._log_message(f"Subscription reader error: {e}", "error")
+        finally:
+            try:
+                if self._sub_process:
+                    rc = self._sub_process.poll()
+                    if rc is not None:
+                        self._log_message(f"[MQTT DEBUG] mosquitto_sub exit rc={rc}")
+            except Exception:
+                pass
+            self.connected = False
+            try:
+                self.root.after(100, lambda: self.send_button.config(state=tk.DISABLED))
+            except Exception:
+                pass
     
     def _send_patient_name(self):
         """Send patient name to Pico"""
@@ -174,7 +326,30 @@ class PicoCompanionApp:
         try:
             # Publish patient name
             message = f"PATIENT:{patient_name}"
-            self.mqtt_client.publish(self.MQTT_TOPIC_PATIENT_NAME, message)
+            pub_exe = _resolve_mosquitto_cli("mosquitto_pub") or "mosquitto_pub"
+            pub_cmd = [
+                pub_exe,
+                "-h", str(self.MQTT_BROKER),
+                "-p", str(self.MQTT_PORT),
+                "-t", str(self.MQTT_TOPIC_PATIENT_NAME),
+                "-m", str(message),
+            ]
+            self._log_message("[MQTT DEBUG] pub cmd: " + " ".join(map(str, pub_cmd)))
+            result = subprocess.run(
+                pub_cmd,
+                capture_output=True,
+                text=True,
+            )
+            self._log_message(f"[MQTT DEBUG] mosquitto_pub rc={result.returncode}")
+            out = (result.stdout or "").strip()
+            err = (result.stderr or "").strip()
+            if out:
+                self._log_message("[MQTT DEBUG] pub stdout: " + out[:3000])
+            if err:
+                self._log_message("[MQTT DEBUG] pub stderr: " + err[:3000])
+            if result.returncode != 0:
+                combo = ((result.stdout or "") + (result.stderr or "")).strip()
+                raise RuntimeError(combo or f"mosquitto_pub failed with exit code {result.returncode}")
             
             self._log_message(f"✓ Sent patient name: {patient_name}")
             messagebox.showinfo("Success", f"Patient name '{patient_name}' sent to Pico!")
@@ -209,9 +384,12 @@ class PicoCompanionApp:
     
     def on_closing(self):
         """Handle application closing"""
-        if self.mqtt_client:
-            self.mqtt_client.loop_stop()
-            self.mqtt_client.disconnect()
+        self._stop_event.set()
+        try:
+            if self._sub_process and self._sub_process.poll() is None:
+                self._sub_process.terminate()
+        except Exception:
+            pass
         
         self.root.destroy()
 

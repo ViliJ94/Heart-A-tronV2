@@ -151,7 +151,7 @@ mpremote reset              # Reboot Pico
 
 **PC Application**:
 ```bash
-pip install paho-mqtt==1.6.1
+pip install -r requirements.txt
 # Tkinter included with Python
 ```
 
