@@ -1,29 +1,26 @@
-"""
-Data Storage - Manages persistent data storage and history on Pico
-"""
+"""Data persistence with overwrite-oldest history retention."""
 
 import json
 import os
 import time
 
+try:
+    import config as cfg
+except ImportError:
+    cfg = None
+
 
 class DataStorage:
-    """Manages data persistence on Pico filesystem"""
-    
-    # Storage paths
-    DATA_FOLDER = "/Data"
-    HISTORY_FILE = "/Data/history.json"
-    SESSION_FILE = "/Data/current_session.json"
-    BACKUP_FOLDER = "/Data/backups"
-    
-    # Storage limits
-    MAX_HISTORY_ENTRIES = 100
-    MAX_SESSION_DATA = 10
-    
+    """Manage history, comparison results, and session snapshots."""
+
     def __init__(self):
-        """Initialize data storage"""
+        data_folder = getattr(cfg, "DATA_FOLDER_PATH", "/Data")
+        self.DATA_FOLDER = data_folder
+        self.HISTORY_FILE = "%s/%s" % (data_folder, getattr(cfg, "HISTORY_FILE_NAME", "history.json"))
+        self.SESSION_FILE = "%s/%s" % (data_folder, getattr(cfg, "SESSION_FILE_NAME", "current_session.json"))
+        self.BACKUP_FOLDER = "%s/%s" % (data_folder, getattr(cfg, "BACKUP_FOLDER_NAME", "backups"))
+        self.MAX_HISTORY_ENTRIES = max(3, int(getattr(cfg, "MAX_HISTORY_ENTRIES", 3)))
         self._ensure_folders()
-        print("[STORAGE] Data storage initialized")
     
     def _ensure_folders(self):
         """Create necessary folders if they don't exist"""
@@ -40,10 +37,6 @@ class DataStorage:
             print(f"[STORAGE] Error creating folders: {e}")
     
     def save_measurement(self, hrv_data, patient_name):
-        """
-        Save HRV measurement to history
-        Appends to history.json with proper rotation
-        """
         try:
             entry = {
                 "patient": patient_name,
@@ -56,27 +49,16 @@ class DataStorage:
                 "type": "HRV"
             }
             
-            # Load existing history
             history = self.load_history()
             history.append(entry)
-            
-            # Keep only recent entries
-            if len(history) > self.MAX_HISTORY_ENTRIES:
-                history = history[-self.MAX_HISTORY_ENTRIES:]
-            
-            # Save updated history
+            self._rotate_history(history)
             self._write_json(self.HISTORY_FILE, history)
-            print(f"[STORAGE] Saved measurement for {patient_name}")
             return True
-            
         except Exception as e:
             print(f"[STORAGE] Error saving measurement: {e}")
             return False
     
     def save_kubios_result(self, kubios_data, patient_name):
-        """
-        Save Kubios analysis result to history
-        """
         try:
             entry = {
                 "patient": patient_name,
@@ -89,37 +71,45 @@ class DataStorage:
                 "type": "KUBIOS"
             }
             
-            # Load existing history
             history = self.load_history()
             history.append(entry)
-            
-            # Keep only recent entries
-            if len(history) > self.MAX_HISTORY_ENTRIES:
-                history = history[-self.MAX_HISTORY_ENTRIES:]
-            
-            # Save updated history
+            self._rotate_history(history)
             self._write_json(self.HISTORY_FILE, history)
-            print(f"[STORAGE] Saved Kubios result for {patient_name}")
             return True
-            
         except Exception as e:
             print(f"[STORAGE] Error saving Kubios result: {e}")
             return False
+
+    def save_comparison_result(self, result, patient_name):
+        try:
+            entry = {
+                "patient": patient_name,
+                "timestamp": self._get_timestamp(),
+                "type": "COMPARISON",
+                "comparison": result
+            }
+            history = self.load_history()
+            history.append(entry)
+            self._rotate_history(history)
+            self._write_json(self.HISTORY_FILE, history)
+            return True
+        except Exception as e:
+            print(f"[STORAGE] Error saving comparison: {e}")
+            return False
     
     def load_history(self):
-        """
-        Load measurement history from storage
-        Returns: list of history entries (most recent first)
-        """
         try:
             data = self._read_json(self.HISTORY_FILE)
             if data is None:
                 return []
             return data
-            
         except Exception as e:
             print(f"[STORAGE] Error loading history: {e}")
             return []
+
+    def _rotate_history(self, history):
+        while len(history) > self.MAX_HISTORY_ENTRIES:
+            history.pop(0)
     
     def save_session_data(self, session_data):
         """
