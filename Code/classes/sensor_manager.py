@@ -113,6 +113,7 @@ class SensorManager:
         return {"buttons": buttons, "ppg": self.get_ppg_sample()}
 
     def get_ppg_sample(self):
+        self.update()
         return self.adc.read_u16() if self.adc else 0
 
     def trigger_led_pulse(self, duration_ms=50):
