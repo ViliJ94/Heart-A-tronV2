@@ -28,6 +28,7 @@ class MeasurementEngine:
         self._dc = 32768
         self._prev_raw = 32768
         self._prev_hp = 0
+        self._prev_filt = 0
         self._last_three = [0, 0, 0]
         self._adaptive_peak = self.min_peak_height
         self._pid_integral = 0.0
@@ -43,6 +44,10 @@ class MeasurementEngine:
         self._last_bpm_update_ms = 0
         self._last_valid_signal_ms = 0
         self._status = "IDLE"
+        # Track signal presence independent of peak detection
+        self._ema_abs = 0.0
+        self._ema_abs_alpha = 0.95  # higher = slower
+        self._signal_floor = max(10, int(self.min_peak_height * 0.25))
 
         self.collection_seconds = self.min_collection_seconds
         self.collection_start_ms = 0
@@ -69,12 +74,37 @@ class MeasurementEngine:
         self._dc = 32768
         self._prev_raw = 32768
         self._prev_hp = 0
+        self._prev_filt = 0
         self._last_three = [0, 0, 0]
         self._adaptive_peak = self.min_peak_height
         self._pid_integral = 0.0
         self._pid_prev_error = 0.0
         self.raw_buffer = []
         self.filtered_buffer = []
+        self._ema_abs = 0.0
+
+    # -------------------------------------------------------------------------
+    # Compatibility wrappers (Main.py expects these names)
+    # -------------------------------------------------------------------------
+
+    def start_measurement(self):
+        self.start()
+
+    def stop_measurement(self):
+        self.stop()
+
+    def set_collection_duration(self, seconds):
+        try:
+            self.collection_seconds = max(1, int(seconds))
+        except Exception:
+            self.collection_seconds = self.min_collection_seconds
+        if self.measuring:
+            self.collection_start_ms = time.ticks_ms()
+
+    def process_sample(self):
+        evt = self.update()
+        bpm = int(evt.get("bpm", 0) or 0)
+        return bpm if bpm > 0 else None
 
     def stop(self):
         self.measuring = False
@@ -90,8 +120,17 @@ class MeasurementEngine:
         while time.ticks_diff(now, self._last_sample_ms) >= self.sample_period_ms:
             self._last_sample_ms = time.ticks_add(self._last_sample_ms, self.sample_period_ms)
             raw = self.sensor.get_ppg_sample()
-            filtered = self._highpass(raw)
+            # High-pass + light smoothing to reduce noise spikes
+            hp = self._highpass(raw)
+            filtered = int(0.8 * self._prev_filt + 0.2 * hp)
+            self._prev_filt = filtered
             self._append_sample_buffers(raw, filtered)
+            # Update signal presence estimate (abs amplitude EMA)
+            a = abs(filtered)
+            self._ema_abs = (self._ema_abs_alpha * self._ema_abs) + ((1.0 - self._ema_abs_alpha) * a)
+            # If we have any meaningful AC component, treat as "signal present"
+            if a >= self._signal_floor:
+                self._last_valid_signal_ms = now
             peak = self._process_peak(filtered, now) or peak
             self._sample_count += 1
 
@@ -107,6 +146,9 @@ class MeasurementEngine:
             self._status = "NO_SIGNAL"
         elif self.latest_bpm > 0:
             self._status = "TRACKING"
+        else:
+            # Keep SEARCHING unless we truly lost AC activity
+            self._status = "SEARCHING"
 
         return {
             "peak": peak,
@@ -141,12 +183,10 @@ class MeasurementEngine:
 
         mid = self._last_three[1]
         signal_amp = abs(mid)
-        error = self._pid_target - signal_amp
-        self._pid_integral += error
-        derivative = error - self._pid_prev_error
-        pid = self._pid_kp * error + self._pid_ki * self._pid_integral + self._pid_kd * derivative
-        self._pid_prev_error = error
-        self._adaptive_peak = max(self.min_peak_height, int(self._adaptive_peak - pid))
+        # More stable adaptive threshold: scale from observed EMA amplitude.
+        # Avoid the PID oscillation that can mark "no signal" when finger is pressed.
+        dyn = int(max(self.min_peak_height, self._ema_abs * 1.25))
+        self._adaptive_peak = min(max(self.min_peak_height, dyn), max(self.min_peak_height * 6, dyn))
         is_local_max = mid > self._last_three[0] and mid > self._last_three[2]
         if not is_local_max or mid < self._adaptive_peak:
             return False

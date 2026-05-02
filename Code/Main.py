@@ -219,13 +219,25 @@ class HRMonitoringSystem:
             self.measurement.start_measurement()
             self.state_machine.state_changed = False
         
-        # Process measurement data
-        bpm = self.measurement.process_sample()
-        if bpm:
-            self.display.update_heart_rate_display(bpm)
+        # Process measurement data (always render status, even if BPM is 0)
+        bpm = self.measurement.process_sample() or 0
+        try:
+            status = self.measurement.get_status()
+        except Exception:
+            status = "MEASURING"
+        try:
+            waveform = self.measurement.get_waveform_points()
+        except Exception:
+            waveform = None
+        try:
+            self.display.show_measurement("MEASURE HR", bpm, status, waveform=waveform)
+        except Exception:
+            # Fallback for simpler display managers
+            if bpm > 0:
+                self.display.update_heart_rate_display(bpm)
         
         # Check for stop button
-        if self.sensor.get_button_input() == "STOP":
+        if self.sensor.get_button_input() in ("STOP", "UP", "BACK"):
             self.measurement.stop_measurement()
             self.state_machine.change_state("MENU")
     
@@ -238,11 +250,18 @@ class HRMonitoringSystem:
             self.measurement.set_collection_duration(30)  # 30 seconds minimum
         
         # Process measurement
-        bpm = self.measurement.process_sample()
+        bpm = self.measurement.process_sample() or 0
         progress = self.measurement.get_collection_progress()
-        
-        if bpm:
-            self.display.update_collection_progress(bpm, progress)
+        try:
+            status = self.measurement.get_status()
+        except Exception:
+            status = "COLLECTING"
+        try:
+            self.display.show_collection("HRV", bpm, int(progress), status)
+        except Exception:
+            # Fallback
+            if bpm > 0:
+                self.display.update_collection_progress(bpm, progress)
         
         # Check if collection is complete
         if self.measurement.is_collection_complete():
@@ -328,7 +347,7 @@ class HRMonitoringSystem:
         
         # Check for navigation input
         action = self.sensor.get_button_input()
-        if action == "BACK":
+        if action in ("BACK", "UP", "STOP"):
             self.state_machine.change_state("MENU")
         elif action == "SELECT":
             selected_entry = self.display.get_selected_history_entry()
