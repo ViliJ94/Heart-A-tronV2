@@ -1,93 +1,82 @@
-# Heart-A-Tron
+Yeah, that broke because the code block got split. Here’s a **clean fixed version** with proper Markdown formatting:
 
+```markdown
+# Pico Heart Rate Monitoring System
 
+## Overview
+The Pico Heart Rate Monitoring System is a compact embedded project built around the Raspberry Pi Pico W. It reads physiological data using a PPG sensor and processes it directly on the device using MicroPython. The system calculates heart rate (BPM) and heart rate variability (HRV), then displays the results on an SSD1306 OLED screen while also communicating with a companion PC application over MQTT.
 
-## Getting started
+The project is designed to demonstrate how low-cost hardware can be used to capture and process biometric data in real time. It does not aim to replace medical-grade equipment, but rather provides a functional and educational system that shows how heart-related metrics can be measured, stored, and analyzed.
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+---
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+## Features
+The system supports real-time heart rate measurement and basic HRV analysis, allowing users to observe how their physiological state changes over time. A simple menu-based user interface is displayed on the OLED screen and controlled using physical buttons, making interaction straightforward without requiring external devices.
 
-## Add your files
+Data is transmitted and received using MQTT, which allows the Pico to communicate with a PC application. This is used, for example, to receive the patient name before starting a session. Measurements are also stored locally in both JSON and binary formats, making it possible to review previous sessions directly on the device.
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+---
 
-```
-cd existing_repo
-git remote add origin https://gitlab.metropolia.fi/alexdz/heart-a-tron.git
-git branch -M main
-git push -uf origin main
-```
+## Hardware
+The system is built using commonly available components. The Raspberry Pi Pico W acts as the main controller and handles both processing and network communication. A PPG sensor connected to ADC pin GP26 is used to capture pulse signals. An SSD1306 OLED display connected via I2C provides visual output, while buttons on pins GP7, GP8, and GP9 allow navigation through the interface. An LED on GP20 is used for status indication.
 
-## Integrate with your tools
+---
 
-- [ ] [Set up project integrations](https://gitlab.metropolia.fi/alexdz/heart-a-tron/-/settings/integrations)
+## Software
+The firmware is written in MicroPython, which allows direct interaction with hardware while keeping the code relatively simple and readable. The project also uses `mpremote` for file transfer and device interaction.
 
-## Collaborate with your team
+On the PC side, a Python-based companion application handles communication and user input, such as sending the patient name. MQTT communication is implemented using the `paho-mqtt` library, with a Mosquitto broker acting as the message server.
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+---
 
 ## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+Start by flashing MicroPython firmware onto the Raspberry Pi Pico W. Once that is done, install `mpremote` on your computer to handle communication with the board. Upload the project files to the Pico using `mpremote`, ensuring that the folder structure is preserved.
+
+After the firmware is set up, run the PC companion application, which will be used to send data such as the patient name and receive measurement results.
+
+---
+
+## Network Configuration
+Both the Pico and the PC must be connected to the same WiFi network for MQTT communication to work correctly. It is important to note that the Pico W only supports 2.4 GHz networks. The IP address of the MQTT broker must be configured in the project files so that the Pico can connect to it.
+
+---
 
 ## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+After powering on the Pico, the system initializes and connects to the configured WiFi network. Once ready, the user can enter a patient name through the PC application. This name is then sent to the Pico via MQTT.
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+Navigation is done using the onboard buttons, allowing the user to move through the menu and start a measurement session. During measurement, the system collects PPG data, processes it, and displays BPM and HRV values in real time. The results are saved locally for later review.
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+---
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+## Project Structure
+The project is organized in a modular way to keep different parts of the system separated and easier to maintain.
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+```
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+main.py
+ssd1306.py
+classes/
+display_manager
+sensor_manager
+wifi_manager
+state_machine
+measurement_engine
+data_storage
+graphics
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+```
 
-## License
-For open source projects, say how it is licensed.
+Each module handles a specific part of the system, such as sensor reading, data processing, display control, or state management.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+---
+
+## Troubleshooting
+If the OLED display does not show anything, it is usually related to the I2C connection, so checking wiring and addresses is a good first step. If MQTT communication fails, the issue is often network-related, such as incorrect broker IP or devices not being on the same network.
+
+If no data is being recorded, the PPG sensor connection should be verified, especially the ADC pin. In cases where buttons do not respond, checking GPIO connections and pull-up or pull-down configurations typically resolves the issue.
+
+---
+
+## Notes
+This project is intended for educational and experimental use. While it demonstrates how BPM and HRV can be measured and processed, it should not be used for medical diagnosis or decision-making.
+```
