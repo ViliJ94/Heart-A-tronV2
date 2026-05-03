@@ -30,6 +30,7 @@ class HRMonitoringSystem:
         self.running = True
         self.patient_name = "Unknown"
         self._menu_index = 0
+        self._history_index = 0
         
         # Initialize components
         print("[INIT] Initializing Display Manager...")
@@ -145,6 +146,7 @@ class HRMonitoringSystem:
             print("[MAIN] Starting main menu loop...")
             while self.running:
                 gc.collect()  # Manage memory
+                self.sensor.update()  # Refill PIO buffer; handle LED timing
                 self.state_machine.update()
                 self._handle_state()
                 time.sleep(0.05)
@@ -339,19 +341,34 @@ class HRMonitoringSystem:
             self.state_machine.change_state("MENU")
     
     def _handle_history_state(self):
-        """Handle history/data viewing"""
+        """Handle history/data viewing with downward scrolling only"""
         if self.state_machine.state_changed:
+            # Load history and reverse so latest entries appear first
             history_data = self.storage.load_history()
-            self.display.show_history_menu(history_data)
+            history_data.reverse()  # Newest first
+            self._history_index = 0
+            self.display.show_history(history_data, self._history_index)
             self.state_machine.state_changed = False
         
         # Check for navigation input
         action = self.sensor.get_button_input()
-        if action in ("BACK", "UP", "STOP"):
+        if action in ("UP", "BACK", "STOP"):
+            # UP button (SW1) goes back to menu
             self.state_machine.change_state("MENU")
+        elif action == "DOWN":
+            # DOWN button scrolls downward with wrap-around
+            history_data = self.storage.load_history()
+            history_data.reverse()  # Newest first
+            if len(history_data) > 0:
+                # Scroll down; wrap to first entry when past the last
+                self._history_index = (self._history_index + 1) % len(history_data)
+                self.display.show_history(history_data, self._history_index)
         elif action == "SELECT":
-            selected_entry = self.display.get_selected_history_entry()
-            if selected_entry:
+            # Show details of selected entry
+            history_data = self.storage.load_history()
+            history_data.reverse()  # Newest first
+            if self._history_index < len(history_data):
+                selected_entry = history_data[self._history_index]
                 self.display.show_history_details(selected_entry)
     
     def _process_menu_selection(self, selection):

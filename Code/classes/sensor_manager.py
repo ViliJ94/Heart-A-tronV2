@@ -8,6 +8,11 @@ try:
 except ImportError:
     cfg = None
 
+try:
+    from classes.pio_adc_handler import PIOADCHandler
+except ImportError:
+    PIOADCHandler = None
+
 
 class SensorManager:
     """Manage buttons, PPG ADC sampling, and heartbeat LED."""
@@ -21,14 +26,20 @@ class SensorManager:
         self.debounce_ms = getattr(cfg, "BUTTON_DEBOUNCE_MS", 20)
         self.led_pin = getattr(cfg, "LED_HEARTBEAT_PIN", 20)
         self.ppg_pin = getattr(cfg, "PPG_SENSOR_ADC_PIN", 26)
+        self.sample_rate_hz = getattr(cfg, "SAMPLE_RATE_HZ", 250)
 
         self.buttons = {}
         self._last_raw_state = {}
         self._last_change_ms = {}
         self._stable_state = {}
         self.led = None
-        self.adc = None
+        self.adc = None  # Legacy; kept for compatibility
+        self.pio_handler = None
         self._led_off_at_ms = 0
+        
+        # Local buffer for PIO samples (refilled each main loop cycle)
+        self._sample_buffer = []
+        self._buffer_index = 0
 
         self._init_buttons()
         self._init_led()
@@ -48,8 +59,39 @@ class SensorManager:
         self.led = Pin(self.led_pin, Pin.OUT)
         self.led.off()
 
+    def _refill_local_buffer(self):
+        """Pull all pending samples from PIO FIFO into local buffer."""
+        if self.pio_handler is None:
+            return
+        
+        try:
+            pending = self.pio_handler.read_available()
+            if pending:
+                self._sample_buffer.extend(pending)
+                self._buffer_index = 0  # Reset read index when new data arrives
+        except Exception as e:
+            print(f"[SENSOR] Error refilling buffer: {e}")
+
     def _init_adc(self):
-        self.adc = ADC(Pin(self.ppg_pin))
+        """Initialize PIO-based ADC handler for deterministic sampling."""
+        if PIOADCHandler is None:
+            print("[SENSOR] WARNING: PIOADCHandler not available, falling back to direct ADC")
+            self.adc = ADC(Pin(self.ppg_pin))
+            return
+        
+        try:
+            self.pio_handler = PIOADCHandler(
+                adc_pin=self.ppg_pin,
+                sample_rate_hz=self.sample_rate_hz,
+                buffer_size=256
+            )
+            self.pio_handler.start()
+            self._sample_buffer = []
+            self._buffer_index = 0
+            print("[SENSOR] PIO ADC handler initialized and started")
+        except Exception as e:
+            print(f"[SENSOR] ERROR initializing PIO handler: {e}, falling back to direct ADC")
+            self.adc = ADC(Pin(self.ppg_pin))
 
     def poll_buttons(self):
         """Return edge events: SELECT, BACK, NEXT."""
@@ -113,8 +155,26 @@ class SensorManager:
         return {"buttons": buttons, "ppg": self.get_ppg_sample()}
 
     def get_ppg_sample(self):
-        self.update()
-        return self.adc.read_u16() if self.adc else 0
+        """
+        Get single PPG sample (non-blocking).
+        
+        If PIO handler is running, returns from local buffer.
+        Otherwise falls back to direct ADC read for compatibility.
+        """
+        # Refill local buffer from PIO FIFO
+        self._refill_local_buffer()
+        
+        # Try to return from local buffer
+        if self._sample_buffer and self._buffer_index < len(self._sample_buffer):
+            sample = self._sample_buffer[self._buffer_index]
+            self._buffer_index += 1
+            return sample
+        
+        # Fallback to direct ADC if no PIO or buffer empty
+        if self.adc:
+            return self.adc.read_u16()
+        
+        return 0
 
     def trigger_led_pulse(self, duration_ms=50):
         if not self.led:
@@ -124,6 +184,10 @@ class SensorManager:
 
     def update(self):
         """Keep non-blocking peripherals in sync."""
+        # Refill sample buffer from PIO
+        self._refill_local_buffer()
+        
+        # Handle LED timing
         if self.led and self._led_off_at_ms:
             if time.ticks_diff(time.ticks_ms(), self._led_off_at_ms) >= 0:
                 self.led.off()

@@ -110,6 +110,34 @@ class MeasurementEngine:
         self.measuring = False
         self._status = "IDLE"
 
+    def _consume_pio_buffer(self, now_ms):
+        """
+        Consume all buffered samples from PIO handler.
+        Processes each with the same filtering pipeline as the main loop.
+        This ensures no samples are lost when multiple are available.
+        """
+        peak = False
+        
+        # If using PIO handler, pull all available buffered samples
+        if hasattr(self.sensor, 'pio_handler') and self.sensor.pio_handler is not None:
+            buffered_samples = self.sensor.pio_handler.read_available()
+            for raw in buffered_samples:
+                # High-pass + light smoothing to reduce noise spikes
+                hp = self._highpass(raw)
+                filtered = int(0.8 * self._prev_filt + 0.2 * hp)
+                self._prev_filt = filtered
+                self._append_sample_buffers(raw, filtered)
+                # Update signal presence estimate (abs amplitude EMA)
+                a = abs(filtered)
+                self._ema_abs = (self._ema_abs_alpha * self._ema_abs) + ((1.0 - self._ema_abs_alpha) * a)
+                # If we have any meaningful AC component, treat as "signal present"
+                if a >= self._signal_floor:
+                    self._last_valid_signal_ms = now_ms
+                peak = self._process_peak(filtered, now_ms) or peak
+                self._sample_count += 1
+        
+        return peak
+
     def update(self):
         """Run at application tick speed, returns event dict."""
         if not self.measuring:
@@ -117,6 +145,11 @@ class MeasurementEngine:
 
         now = time.ticks_ms()
         peak = False
+        
+        # First, try to consume buffered samples from PIO
+        peak = self._consume_pio_buffer(now) or peak
+        
+        # Then, use traditional timing-based sampling as fallback/complement
         while time.ticks_diff(now, self._last_sample_ms) >= self.sample_period_ms:
             self._last_sample_ms = time.ticks_add(self._last_sample_ms, self.sample_period_ms)
             raw = self.sensor.get_ppg_sample()
