@@ -5,8 +5,8 @@ Run this file to see installation instructions
 
 INSTALLATION_GUIDE = """
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║          PICO HEART RATE MONITORING SYSTEM - INSTALLATION GUIDE             ║
-║                          Level 5 - Complete System                          ║
+║          PICO HEART RATE MONITORING SYSTEM - INSTALLATION GUIDE              ║
+║                                                                              ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
 STEP 1: PREPARE YOUR PICO W
