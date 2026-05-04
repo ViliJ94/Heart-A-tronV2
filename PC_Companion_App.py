@@ -23,6 +23,7 @@ try:
 except Exception:
     cfg = None
 
+mosquitto_pub -t patient/name -r -n
 
 def _agent_dbg(hypothesis_id, location, message, data=None, run_id="pre-fix"):
     """Append NDJSON debug line to debug-3d63e7.log (no secrets)."""
@@ -42,7 +43,23 @@ def _agent_dbg(hypothesis_id, location, message, data=None, run_id="pre-fix"):
     except Exception:
         pass
 
+def _clear_retained_topic():
+    try:
+        pub_exe = _resolve_mosquitto_cli("mosquitto_pub") or "mosquitto_pub"
 
+        cmd = [
+            pub_exe,
+            "-t", "patient/name",
+            "-r",
+            "-n"
+        ]
+
+        subprocess.run(cmd, capture_output=True, text=True)
+        print("[MQTT INIT] Cleared retained topic: patient/name")
+
+    except Exception as e:
+        print("[MQTT INIT] Failed to clear retained topic:", e)
+        
 def _resolve_mosquitto_cli(exe_name):
     """
     Resolve mosquitto_pub/sub executable path.
@@ -509,7 +526,25 @@ Quick Start Guide:
 def main():
     """Entry point for companion application"""
     root = tk.Tk()
-    
+
+    # CLEAR RETAINED MQTT STATE BEFORE APP START
+    try:
+        import subprocess
+
+        pub_exe = "mosquitto_pub"  # или _resolve_mosquitto_cli если доступен
+
+        subprocess.run([
+            pub_exe,
+            "-t", "patient/name",
+            "-r",
+            "-n"
+        ], capture_output=True, text=True)
+
+        print("[MQTT INIT] Cleared retained topic: patient/name")
+
+    except Exception as e:
+        print("[MQTT INIT] Retained clear failed:", e)
+
     # Launch companion app directly (skip quick-start gate).
     try:
         app = PicoCompanionApp(root)
@@ -518,7 +553,6 @@ def main():
     except Exception as e:
         print(f"Error: {e}")
         messagebox.showerror("Error", f"Failed to start application:\n{e}")
-
 
 if __name__ == "__main__":
     main()

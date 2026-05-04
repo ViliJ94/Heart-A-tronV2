@@ -316,25 +316,38 @@ class HRMonitoringSystem:
                 print("[KUBIOS] MQTT Broker connected")
             
             # Step 3: Get patient name via MQTT (30 second timeout)
-            if self.wifi.mqtt_client is not None:
+    if self.wifi.mqtt_client is not None:
 
-                if not hasattr(self, "_kubios_wait_start"):
-                    print("[KUBIOS] Waiting for patient name...")
-                    self._kubios_wait_start = time.time()
+        if not hasattr(self, "_kubios_wait_start"):
+            print("[KUBIOS] Waiting for patient name...")
+            self._kubios_wait_start = time.time()
 
-                # non-blocking check
-                name = self.wifi.check_patient_name_message()
+        # timeout check
+        if time.time() - self._kubios_wait_start < 30:
+
+            name = self.wifi.check_patient_name_message()
 
             if name:
                 self.patient_name = name
                 print(f"[KUBIOS] Received patient name: {self.patient_name}")
                 self.display.show_success_message(f"Hello,\n{self.patient_name}", duration=2)
-                self._kubios_wait_start = None  # reset
+                self._kubios_wait_start = None
+
             
-            self.display.show_kubios_screen()
-            self.measurement.start_measurement()
-            self.measurement.set_collection_duration(30)
-            self.state_machine.state_changed = False
+                self.display.show_kubios_screen()
+                self.measurement.start_measurement()
+                self.measurement.set_collection_duration(30)
+                self.state_machine.state_changed = False
+
+
+    else:
+        print("[KUBIOS] timeout - using default patient name")
+        self.patient_name = "Unknown_Patient"
+
+        self.display.show_kubios_screen()
+        self.measurement.start_measurement()
+        self.measurement.set_collection_duration(30)
+        self.state_machine.state_changed = False
         
         # Process measurement
         bpm = self.measurement.process_sample()

@@ -104,32 +104,43 @@ class WiFiManager:
                 pass
 
     def _on_mqtt_message(self, topic, msg):
+        if topic is None or topic == b'' or msg is None:
+            print("[MQTT] DROP EMPTY MESSAGE (topic or msg is empty)")
+            return
+        print("[MQTT RAW TOPIC]", topic)
+        print("[MQTT RAW MSG]", msg)
         """Callback invoked by umqtt when a message arrives."""
         try:
-            topic_str = topic.decode()
-            msg_str = msg.decode()
-            print("[MQTT] rx topic=%s msg=%s" % (topic_str, msg_str))
-            if topic_str == self.topic_patient:
-                # Expected format: "PATIENT:<name>"
-                if msg_str.startswith("PATIENT:"):
-                    self.patient_name_received = msg_str[len("PATIENT:"):].strip()
-                else:
-                    self.patient_name_received = msg_str.strip()
-                print("[MQTT] patient_name_received:", self.patient_name_received)
-            elif topic_str == self.topic_kubios:
-                try:
-                    payload = json.loads(msg_str)
-                except Exception as e:
-                    print(f"[MQTT ERROR] Invalid Kubios payload: {e}")
-                    payload = {"status": "error", "error": "invalid payload", "raw": msg_str}
-                self._kubios_last_response = payload
-                self.last_kubios_response = payload
-                print("[MQTT] kubios payload stored", payload)
-            else:
-                print("[MQTT] received unexpected topic:", topic_str)
-        except Exception as e:
-            print(f"[MQTT ERROR] Message handling failed: {e}")
+            topic_str = topic.decode() if topic else ""
+        except Exception:
+                topic_str = ""
 
+        try:
+            msg_str = msg.decode() if msg else ""
+        except Exception:
+                 msg_str = ""
+        if topic_str == "":
+            print("[MQTT] EMPTY TOPIC AFTER DECODE → IGNORED")
+            return
+        print("[MQTT] rx topic=%s msg=%s" % (topic_str, msg_str))
+        if topic_str == self.topic_patient:
+            # Expected format: "PATIENT:<name>"
+            if msg_str.startswith("PATIENT:"):
+                self.patient_name_received = msg_str[len("PATIENT:"):].strip()
+            else:
+                self.patient_name_received = msg_str.strip()
+            print("[MQTT] patient_name_received:", self.patient_name_received)
+        elif topic_str == self.topic_kubios:
+            try:
+                payload = json.loads(msg_str)
+            except Exception as e:
+                print(f"[MQTT ERROR] Invalid Kubios payload: {e}")
+                payload = {"status": "error", "error": "invalid payload", "raw": msg_str}
+            self._kubios_last_response = payload
+            self.last_kubios_response = payload
+            print("[MQTT] kubios payload stored", payload)
+        else:
+            print("[MQTT] received unexpected topic:", topic_str)
     def check_patient_name_message(self):
         """Poll MQTT and return patient name if available."""
         if self.mqtt_client is None:
