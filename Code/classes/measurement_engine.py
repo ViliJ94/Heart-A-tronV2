@@ -38,6 +38,9 @@ class MeasurementEngine:
         self._pid_kd = float(getattr(cfg, "PID_KD", 0.01))
         self._pid_target = float(getattr(cfg, "PID_TARGET_AMPLITUDE", 800.0))
 
+        self._consecutive_rejected_peaks = 0
+        self._max_rejected_before_reset = 3
+
         self._sample_count = 0
         self._last_sample_ms = 0
         self._last_peak_ms = None
@@ -228,26 +231,45 @@ class MeasurementEngine:
             peak_gap_ms = time.ticks_diff(now_ms, self._last_peak_ms)
             if peak_gap_ms < int(1000 * self.min_peak_distance / self.sample_rate):
                 return False
+
             rr_ms = peak_gap_ms
             bpm = int(60000 / rr_ms) if rr_ms > 0 else 0
+
+            is_valid_jump = True
             if len(self.rr_intervals) > 0:
                 prev_rr = self.rr_intervals[-1]
-                if abs(rr_ms - prev_rr) > (prev_rr *  0.25):
-                    self._last_peak_ms = now_ms
-                    return True
+                if abs(rr_ms - prev_rr) > (prev_rr * 0.35):
+                    is_valid_jump = False
 
-            if self.min_hr <= bpm <= self.max_hr:
+            is_acceptable = (self.min_hr <= bpm <= self.max_hr) and is_valid_jump
+
+            if is_acceptable:
                 self.rr_intervals.append(rr_ms)
                 if len(self.rr_intervals) > self.max_rr:
                     self.rr_intervals.pop(0)
+
                 self._last_valid_signal_ms = now_ms
                 self.sensor.trigger_led_pulse(60)
+                self._last_peak_ms = now_ms
+                self._consecutive_rejected_peaks = 0
+                return True
+            else:
+
+                self._consecutive_rejected_peaks += 1
+
+
+                if self._consecutive_rejected_peaks >= self._max_rejected_before_reset:
+                    self._last_peak_ms = now_ms
+                    self._consecutive_rejected_peaks = 0
+
+                return False
+
         else:
             self._last_valid_signal_ms = now_ms
+            self._last_peak_ms = now_ms
+            self._consecutive_rejected_peaks = 0
             self.sensor.trigger_led_pulse(60)
-
-        self._last_peak_ms = now_ms
-        return True
+            return True
 
     def _calculate_bpm(self):
         if len(self.rr_intervals) < 3:
