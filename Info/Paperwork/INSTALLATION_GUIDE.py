@@ -118,7 +118,7 @@ STEP 5: SETUP PC COMPANION APP
 
 3. Install and run a Mosquitto broker (and CLI tools):
    - Install Mosquitto for your OS (includes mosquitto_pub/mosquitto_sub)
-   - Ensure port 1883 is open on your network
+   - Ensure port 21883 is open on your network
    - Start the broker (service or manual)
 
 4. Run the companion application:
@@ -138,8 +138,8 @@ STEP 6: CONFIGURE NETWORK (if needed)
 Default WiFi Configuration (in code):
    SSID: KMD652_Group4
    Password: Group_4isDaBestest!
-   MQTT Broker IP: 192.168.4.153
-   MQTT Port: 1883
+   MQTT Broker IP: 192.168.4.253
+   MQTT Port: 21883
 
 To change (edit wifi_manager.py):
    1. Open Code/classes/wifi_manager.py

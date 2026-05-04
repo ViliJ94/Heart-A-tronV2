@@ -113,6 +113,7 @@ class HRMonitoringSystem:
         # Listen for patient name message on MQTT
         timeout = 30  # seconds
         start_time = time.time()
+        next_debug_time = start_time + 5
         
         while (time.time() - start_time) < timeout:
             message = self.wifi.check_patient_name_message()
@@ -121,6 +122,10 @@ class HRMonitoringSystem:
                 print(f"[PATIENT] Received patient name: {self.patient_name}")
                 self.display.show_success_message(f"Hello,\n{self.patient_name}", duration=2)
                 return True
+            if time.time() >= next_debug_time:
+                print("[PATIENT] waiting for patient name... mqtt_client=", self.wifi.mqtt_client is not None,
+                      "last_check_error=", self.wifi.last_mqtt_check_error)
+                next_debug_time += 5
             time.sleep(0.1)
         
         print("[PATIENT] Timeout - using default name")
@@ -296,11 +301,16 @@ class HRMonitoringSystem:
             
             # Step 2: Initialize MQTT Broker
             print("[KUBIOS] Initializing MQTT Broker...")
-            self.wifi._init_mqtt()
-            if self.wifi.mqtt_client is None:
+            broker_available = self.wifi._init_mqtt()
+            if not broker_available:
                 print("[KUBIOS] MQTT unavailable - continuing offline")
+                print("[KUBIOS] mqtt_init_error:", self.wifi.mqtt_init_error)
                 self.patient_name = "Offline_Patient"
                 try:
+                    self.display.show_error_screen(
+                        "Broker init failed\n" + (self.wifi.mqtt_init_error or "unknown error"),
+                        duration=3,
+                    )
                     self.display.show_warning_message("Broker offline\nUsing local name", duration=2)
                 except Exception:
                     pass

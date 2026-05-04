@@ -24,7 +24,7 @@ class WiFiManager:
         self.ssid = getattr(cfg, "WIFI_SSID", "")
         self.password = getattr(cfg, "WIFI_PASSWORD", "")
         self.mqtt_broker = getattr(cfg, "MQTT_BROKER_IP", "")
-        self.mqtt_port = getattr(cfg, "MQTT_BROKER_PORT", 1883)
+        self.mqtt_port = getattr(cfg, "MQTT_BROKER_PORT", 21883)
         self.topic_hrv = getattr(cfg, "MQTT_TOPIC_HRV_DATA", "hrv/data")
         self.topic_patient = getattr(cfg, "MQTT_TOPIC_PATIENT_NAME", "patient/name")
         self.topic_kubios = getattr(cfg, "MQTT_TOPIC_KUBIOS_RESULTS", "kubios/results")
@@ -40,6 +40,10 @@ class WiFiManager:
         self.patient_name_received = None
         self._kubios_last_response = None
         self._kubios_pending = {}
+        self.mqtt_init_error = None
+        self.last_mqtt_check_error = None
+        self.last_kubios_request_id = None
+        self.last_kubios_response = None
 
     def connect(self):
         try:
@@ -51,8 +55,10 @@ class WiFiManager:
             while timeout > 0:
                 if self.wlan.isconnected():
                     self.connected = True
-                    self._init_mqtt()
-                    self.publish_status("online")
+                    if self._init_mqtt():
+                        self.publish_status("online")
+                    else:
+                        print("[WiFi] MQTT init failed after WiFi connect:", self.mqtt_init_error)
                     return True
                 time.sleep(1)
                 timeout -= 1
@@ -61,8 +67,16 @@ class WiFiManager:
         return False
 
     def _init_mqtt(self):
-        if self.mqtt_client or MQTTClient is None:
-            return
+        if self.mqtt_client:
+            return True
+        if MQTTClient is None:
+            self.mqtt_init_error = "umqtt.simple not available"
+            print("[MQTT] init failed: umqtt.simple not available")
+            return False
+        if not self.mqtt_broker or not self.mqtt_port:
+            self.mqtt_init_error = f"broker or port not configured (broker={self.mqtt_broker}, port={self.mqtt_port})"
+            print("[MQTT] init failed: broker or port not configured")
+            return False
         try:
             # Avoid getting stuck when broker is unreachable
             try:
@@ -76,9 +90,13 @@ class WiFiManager:
             self.mqtt_client.subscribe(self.topic_patient)
             self.mqtt_client.subscribe(self.topic_kubios)
             print("[MQTT] subscribed:", self.topic_patient, self.topic_kubios)
+            self.mqtt_init_error = None
+            return True
         except Exception as exc:
-            print("[MQTT] init failed:", exc)
+            self.mqtt_init_error = str(exc)
+            print("[MQTT] init failed:", self.mqtt_init_error)
             self.mqtt_client = None
+            return False
         finally:
             try:
                 socket.setdefaulttimeout(None)
@@ -99,20 +117,29 @@ class WiFiManager:
                     self.patient_name_received = msg_str.strip()
                 print("[MQTT] patient_name_received:", self.patient_name_received)
             elif topic_str == self.topic_kubios:
-                payload = json.loads(msg_str)
+                try:
+                    payload = json.loads(msg_str)
+                except Exception as e:
+                    print(f"[MQTT ERROR] Invalid Kubios payload: {e}")
+                    payload = {"status": "error", "error": "invalid payload", "raw": msg_str}
                 self._kubios_last_response = payload
+                self.last_kubios_response = payload
+                print("[MQTT] kubios payload stored", payload)
+            else:
+                print("[MQTT] received unexpected topic:", topic_str)
         except Exception as e:
             print(f"[MQTT ERROR] Message handling failed: {e}")
 
     def check_patient_name_message(self):
         """Poll MQTT and return patient name if available."""
         if self.mqtt_client is None:
+            print("[MQTT] check_patient_name_message: mqtt_client is None")
             return None
         try:
             self.mqtt_client.check_msg()
         except Exception as exc:
-            # Useful when sockets time out / broker disconnects
-            print("[MQTT] check_msg error:", exc)
+            self.last_mqtt_check_error = str(exc)
+            print("[MQTT] check_msg error:", self.last_mqtt_check_error)
             pass
         name = self.patient_name_received
         self.patient_name_received = None
@@ -181,11 +208,13 @@ class WiFiManager:
         """Return dict with status='pending'|'ok'|'timeout'|'error'."""
         self.poll()
         if request_id not in self._kubios_pending:
+            print("[KUBIOS] poll_kubios_analysis: request_id not pending", request_id)
             return {"status": "error", "result": None}
 
         start_ms = self._kubios_pending[request_id]
         if time.ticks_diff(time.ticks_ms(), start_ms) > self.kubios_timeout_ms:
             del self._kubios_pending[request_id]
+            print("[KUBIOS] poll_kubios_analysis timeout", request_id)
             return {"status": "timeout", "result": None}
 
         payload = self._kubios_last_response
@@ -194,16 +223,47 @@ class WiFiManager:
 
         response_req_id = payload.get("request_id", "")
         if response_req_id and response_req_id != request_id:
+            print("[KUBIOS] mismatched request_id", request_id, response_req_id)
             return {"status": "pending", "result": None}
 
         self._kubios_last_response = None
         del self._kubios_pending[request_id]
 
         if payload.get("status", "ok") not in ("ok", "success"):
+            print("[KUBIOS] response error payload:", payload)
             return {"status": "error", "result": payload}
 
         result = payload.get("result", payload)
         return {"status": "ok", "result": result}
+
+    def send_to_kubios(self, rr_intervals, patient_name):
+        """Send RR interval request to Kubios and wait for a response."""
+        if self.mqtt_client is None:
+            print("[KUBIOS] send failed: MQTT client unavailable")
+            return None
+
+        request_id = self.request_kubios_analysis(rr_intervals, patient_name)
+        if request_id:
+            self.last_kubios_request_id = request_id
+            print("[KUBIOS] sent request", request_id, "patient_name=", patient_name)
+        if not request_id:
+            print("[KUBIOS] send failed: could not create request")
+            return None
+
+        deadline = time.ticks_add(time.ticks_ms(), self.kubios_timeout_ms)
+        while time.ticks_diff(deadline, time.ticks_ms()) > 0:
+            result = self.poll_kubios_analysis(request_id)
+            if result["status"] == "ok":
+                return result["result"]
+            if result["status"] == "error":
+                print("[KUBIOS] response error:", result["result"])
+                return None
+            if result["status"] == "timeout":
+                print("[KUBIOS] request timed out")
+                return None
+            time.sleep(0.1)
+        print("[KUBIOS] request timeout waiting for response")
+        return None
 
     def _get_timestamp(self):
         try:
@@ -231,6 +291,7 @@ class WiFiManager:
         except Exception:
             pass
         try:
-            self.wlan.disconnect()
+            if hasattr(self.wlan, "disconnect"):
+                self.wlan.disconnect()
         except Exception:
             pass

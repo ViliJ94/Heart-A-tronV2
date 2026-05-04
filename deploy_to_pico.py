@@ -33,7 +33,7 @@ class PicoDeployer:
     }
     
     CONFIG_FILES = {
-        "CONFIG.py": ":/config.py",
+        "Code/config.py": ":/config.py",
     }
     
     def __init__(self, port=None):

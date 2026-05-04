@@ -8,6 +8,8 @@ The Pico Heart Rate Monitoring System is a compact embedded project built around
 
 The project is designed to demonstrate how low-cost hardware can be used to capture and process biometric data in real time. It does not aim to replace medical-grade equipment, but rather provides a functional and educational system that shows how heart-related metrics can be measured, stored, and analyzed.
 
+Project paperwork and documentation are kept in `Info/Paperwork/` for clarity, while `deploy_to_pico.py` and `PC_Companion_App.py` stay in the repository root for easy access.
+
 ---
 
 ## Features

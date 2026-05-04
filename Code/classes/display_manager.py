@@ -59,6 +59,24 @@ class DisplayManager:
         if self.display:
             self.display.text(str(text)[:21], x, y)
 
+    def _wrap_text(self, text, width=21, lines=3):
+        words = str(text).split()
+        wrapped = []
+        current = ""
+        for word in words:
+            if len(current) + len(word) + (1 if current else 0) <= width:
+                current = f"{current} {word}".strip()
+            else:
+                wrapped.append(current)
+                current = word
+                if len(wrapped) >= lines:
+                    break
+        if current and len(wrapped) < lines:
+            wrapped.append(current)
+        while len(wrapped) < lines:
+            wrapped.append("")
+        return wrapped[:lines]
+
     def show_message(self, title, line2="", line3=""):
         self._clear()
         self._line(title, 0, 0)
@@ -74,8 +92,8 @@ class DisplayManager:
         self.show_message(line1, line2)
 
     def show_waiting_screen(self, text):
-        parts = str(text).split("\n")
-        self.show_message(parts[0] if len(parts) > 0 else "", parts[1] if len(parts) > 1 else "", parts[2] if len(parts) > 2 else "")
+        parts = self._wrap_text(text, width=21, lines=3)
+        self.show_message(parts[0], parts[1], parts[2])
 
     def show_success_message(self, text, duration=1):
         self.show_waiting_screen(text)
@@ -91,12 +109,16 @@ class DisplayManager:
         except Exception:
             pass
 
-    def show_error_message(self, text, duration=2):
-        self.show_waiting_screen(text)
+    def show_error_screen(self, text, duration=2):
+        parts = self._wrap_text(text, width=21, lines=3)
+        self.show_message(parts[0], parts[1], parts[2])
         try:
             time.sleep(max(0, float(duration)))
         except Exception:
             pass
+
+    def show_error_message(self, text, duration=2):
+        self.show_error_screen(text, duration=duration)
 
     def show_main_menu(self, selected):
         options = ["Measure HR", "HRV Analysis", "Kubios", "History"]

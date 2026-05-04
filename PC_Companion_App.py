@@ -19,7 +19,7 @@ import json as _json
 import socket
 
 try:
-    import CONFIG as cfg  # project-wide config (preferred)
+    from Code import config as cfg  # project-wide config (preferred)
 except Exception:
     cfg = None
 
@@ -52,7 +52,7 @@ def _resolve_mosquitto_cli(exe_name):
     if p:
         return p
     candidates = []
-    # Allow explicit override via CONFIG.py (PC-side only)
+    # Allow explicit override via config.py (PC-side only)
     try:
         bin_dir = getattr(cfg, "MOSQUITTO_BIN_DIR", "") if cfg else ""
         if bin_dir:
@@ -79,9 +79,10 @@ class PicoCompanionApp:
     
     # MQTT Configuration (must match Pico settings)
     MQTT_BROKER = getattr(cfg, "MQTT_BROKER_IP", "127.0.0.1") if cfg else "127.0.0.1"
-    MQTT_PORT = int(getattr(cfg, "MQTT_BROKER_PORT", 1883)) if cfg else 1883
+    MQTT_PORT = int(getattr(cfg, "MQTT_BROKER_PORT", 21883)) if cfg else 21883
     MQTT_TOPIC_PATIENT_NAME = getattr(cfg, "MQTT_TOPIC_PATIENT_NAME", "patient/name") if cfg else "patient/name"
     MQTT_TOPIC_DEVICE_STATUS = getattr(cfg, "MQTT_TOPIC_DEVICE_STATUS", "device/status") if cfg else "device/status"
+    MQTT_TOPIC_KUBIOS_RESULTS = getattr(cfg, "MQTT_TOPIC_KUBIOS_RESULTS", "kubios/results") if cfg else "kubios/results"
     
     def __init__(self, root):
         """Initialize the companion application"""
@@ -96,6 +97,9 @@ class PicoCompanionApp:
         self._stop_event = threading.Event()
         self.connected = False
         self._connected_once = False
+        self._last_device_status = None
+        self._last_kubios_error = None
+        self._broker_error_message = None
         
         # Create UI
         self._create_ui()
@@ -129,6 +133,10 @@ class PicoCompanionApp:
         self.conn_details_label = ttk.Label(self.conn_frame, text="",
                                            foreground="gray", font=("Arial", 9))
         self.conn_details_label.pack(pady=5)
+
+        self.conn_status_detail_label = ttk.Label(self.conn_frame, text="",
+                                           foreground="gray", font=("Arial", 9))
+        self.conn_status_detail_label.pack(pady=5)
         
         # Patient configuration frame
         patient_frame = ttk.LabelFrame(self.root, text="Patient Configuration")
@@ -229,6 +237,7 @@ class PicoCompanionApp:
                 "-h", str(self.MQTT_BROKER),
                 "-p", str(self.MQTT_PORT),
                 "-t", str(self.MQTT_TOPIC_DEVICE_STATUS),
+                "-t", str(self.MQTT_TOPIC_KUBIOS_RESULTS),
                 "-v",
             ]
             self._log_message("[MQTT DEBUG] sub cmd: " + " ".join(map(str, sub_cmd)))
@@ -245,16 +254,23 @@ class PicoCompanionApp:
                 time.sleep(0.2)
                 rc = self._sub_process.poll()
                 if rc is not None:
-                    self._log_message(f"[MQTT DEBUG] mosquitto_sub exited early rc={rc}", "error")
+                    self._broker_error_message = f"mosquitto_sub exited early rc={rc}"
+                    self._log_message(f"[MQTT DEBUG] {self._broker_error_message}", "error")
+                    self.connected = False
+                    self._connected_once = False
+                    self.root.after(100, lambda: self.send_button.config(state=tk.DISABLED))
+                else:
+                    self.connected = True
+                    self._broker_error_message = None
+                    self._log_message("[MQTT DEBUG] mosquitto_sub started successfully")
+                    self.root.after(100, lambda: self.send_button.config(state=tk.NORMAL))
             except Exception:
-                pass
+                self.connected = False
+                self._broker_error_message = "mosquitto_sub startup check failed"
+                self.root.after(100, lambda: self.send_button.config(state=tk.DISABLED))
 
-            # Do NOT mark connected yet. We mark connected only after receiving
-            # at least one message, which proves broker reachability.
-            self.connected = False
-            self._connected_once = False
-            self.root.after(100, lambda: self.send_button.config(state=tk.DISABLED))
-            self._log_message("[MQTT DEBUG] Waiting for first message to confirm connection...")
+            self._log_message("[MQTT DEBUG] Subscription started; connected to broker.")
+            self._log_message("[MQTT DEBUG] Waiting for device status messages...")
 
             self._sub_thread = threading.Thread(target=self._mosquitto_sub_reader, daemon=True)
             self._sub_thread.start()
@@ -276,25 +292,43 @@ class PicoCompanionApp:
                 # Some failures are printed to stdout/stderr; surface them and keep disconnected.
                 lower = line.lower()
                 if ("error:" in lower) or ("connection refused" in lower) or ("not authorised" in lower) or ("timed out" in lower):
+                    self._broker_error_message = line
                     self._log_message("[MQTT DEBUG] sub output: " + line, "error")
+                    self.connected = False
+                    try:
+                        self.root.after(100, lambda: self.send_button.config(state=tk.DISABLED))
+                    except Exception:
+                        pass
                     continue
+
+                # mosquitto_sub -v prints: "<topic> <payload>"
+                if line.startswith(self.MQTT_TOPIC_DEVICE_STATUS + " "):
+                    payload = line[len(self.MQTT_TOPIC_DEVICE_STATUS) + 1 :]
+                    self._last_device_status = payload
+                    topic_label = "Device"
+                elif line.startswith(self.MQTT_TOPIC_KUBIOS_RESULTS + " "):
+                    payload = line[len(self.MQTT_TOPIC_KUBIOS_RESULTS) + 1 :]
+                    topic_label = "Kubios"
+                    if "failed" in payload.lower() or "error" in payload.lower() or "exception" in payload.lower():
+                        self._last_kubios_error = payload
+                    else:
+                        self._last_kubios_error = None
+                else:
+                    payload = line
+                    topic_label = "Message"
 
                 # First non-error line implies we are receiving messages via broker.
                 if not self._connected_once:
                     self._connected_once = True
                     self.connected = True
+                    self._broker_error_message = None
                     try:
                         self.root.after(0, lambda: self.send_button.config(state=tk.NORMAL))
                     except Exception:
                         pass
-                    self._log_message("✓ Connected (confirmed by incoming message)")
+                    self._log_message("✓ Received first device status message")
 
-                # mosquitto_sub -v prints: "<topic> <payload>"
-                if line.startswith(self.MQTT_TOPIC_DEVICE_STATUS + " "):
-                    payload = line[len(self.MQTT_TOPIC_DEVICE_STATUS) + 1 :]
-                else:
-                    payload = line
-                self._log_message(f"Device: {payload}")
+                self._log_message(f"{topic_label}: {payload}")
         except Exception as e:
             self._log_message(f"Subscription reader error: {e}", "error")
         finally:
@@ -333,6 +367,7 @@ class PicoCompanionApp:
                 "-p", str(self.MQTT_PORT),
                 "-t", str(self.MQTT_TOPIC_PATIENT_NAME),
                 "-m", str(message),
+                "-r"
             ]
             self._log_message("[MQTT DEBUG] pub cmd: " + " ".join(map(str, pub_cmd)))
             result = subprocess.run(
@@ -362,12 +397,18 @@ class PicoCompanionApp:
         """Update connection status display"""
         if self.connected:
             self.conn_status_label.config(text="✓ Connected", foreground="green")
-            self.conn_details_label.config(
-                text=f"Broker: {self.MQTT_BROKER}:{self.MQTT_PORT}"
-            )
+            details = f"Broker: {self.MQTT_BROKER}:{self.MQTT_PORT}"
+            if self._last_device_status:
+                details += f" | Status: {self._last_device_status}"
+            self.conn_details_label.config(text=details)
+            if self._last_kubios_error:
+                self.conn_status_detail_label.config(text=f"Kubios Failed: {self._last_kubios_error}")
+            else:
+                self.conn_status_detail_label.config(text="")
         else:
             self.conn_status_label.config(text="✗ Disconnected", foreground="red")
-            self.conn_details_label.config(text="Attempting to reconnect...")
+            self.conn_details_label.config(text=f"Broker: {self.MQTT_BROKER}:{self.MQTT_PORT}")
+            self.conn_status_detail_label.config(text=self._broker_error_message or (f"Kubios Failed: {self._last_kubios_error}" if self._last_kubios_error else "Attempting to reconnect..."))
         
         # Schedule next update
         self.root.after(2000, self._update_status)
@@ -438,7 +479,7 @@ Quick Start Guide:
             ("Pico powered on", True),
             ("Pico connected to WiFi", False),
             ("MQTT broker running", False),
-            ("Network: 192.168.4.153:1883", False)
+            ("Network: 192.168.4.253:21883", False)
         ]
         
         for check_name, status in checks:
