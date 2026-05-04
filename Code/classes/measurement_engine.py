@@ -235,6 +235,8 @@ class MeasurementEngine:
             rr_ms = peak_gap_ms
             bpm = int(60000 / rr_ms) if rr_ms > 0 else 0
 
+            # Validates beat consistency and HR limits, storing accepted intervals
+            # or resetting reference point in case of interference.
             is_valid_jump = True
             if len(self.rr_intervals) > 0:
                 prev_rr = self.rr_intervals[-1]
