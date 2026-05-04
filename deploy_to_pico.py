@@ -32,6 +32,7 @@ class PicoDeployer:
         "Code/classes/data_storage.py": ":/classes/data_storage.py",
         "Code/classes/graphics.py": ":/classes/graphics.py",
         "Code/classes/__init__.py": ":/classes/__init__.py",
+        "Code/classes/kubios_flow.py": ":/classes/kubios_flow.py",
     }
     
     CONFIG_FILES = {

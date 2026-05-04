@@ -1,9 +1,3 @@
-"""
-Heart Rate Monitoring System for Raspberry Pi Pico W
-Level 5: Complete GUI with HRV analysis, history, and Kubios integration
-Author: Pico Advanced Monitoring System
-"""
-
 import machine
 import time
 import json
@@ -15,6 +9,7 @@ from classes.wifi_manager import WiFiManager
 from classes.state_machine import StateMachine
 from classes.data_storage import DataStorage
 from classes.measurement_engine import MeasurementEngine
+from classes.kubios_flow import KubiosFlow
 
 
 def _agent_dbg(*args, **kwargs):
@@ -31,6 +26,7 @@ class HRMonitoringSystem:
         self.patient_name = "Unknown"
         self._menu_index = 0
         self._history_index = 0
+        
         
         # Initialize components
         print("[INIT] Initializing Display Manager...")
@@ -54,7 +50,7 @@ class HRMonitoringSystem:
         self.display.show_init_message("Initializing...", "Please wait")
         self._safe_mode = self._is_safe_mode_enabled()
         self._boot_grace_period()
-    
+        self.kubios = KubiosFlow(self.wifi,self.measurement,self.display,self.storage)
     def _is_safe_mode_enabled(self):
         """Check for safe mode marker file on device filesystem."""
         try:
@@ -283,80 +279,17 @@ class HRMonitoringSystem:
             self.state_machine.change_state("MENU")
     
     def _handle_kubios_state(self):
-        """Handle Kubios Cloud integration"""
-        # Initialize WiFi and Broker connection at start of Kubios mode
+
+    # first entry
         if self.state_machine.state_changed:
-            self.display.show_message("Initializing\nKubios Mode...")
-            
-            # Step 1: Connect to WiFi
-            print("[KUBIOS] Connecting to WiFi...")
-            if not self.wifi.connect():
-                print("[KUBIOS ERROR] WiFi connection failed")
-                self.display.show_error_message("WiFi Connect\nFailed", duration=2)
+            self.state_machine.state_changed = False
+            ok = self.kubios.start()
+            if not ok:
                 self.state_machine.change_state("MENU")
                 return
-            print("[KUBIOS] WiFi connected")
-            
-            # Step 2: Initialize MQTT Broker
-            print("[KUBIOS] Initializing MQTT Broker...")
-            broker_available = self.wifi._init_mqtt()
-            if not broker_available:
-                print("[KUBIOS] MQTT unavailable - continuing offline")
-                print("[KUBIOS] mqtt_init_error:", self.wifi.mqtt_init_error)
-                self.patient_name = "Offline_Patient"
-                try:
-                    self.display.show_error_screen(
-                        "Broker init failed\n" + (self.wifi.mqtt_init_error or "unknown error"),
-                        duration=3,
-                    )
-                    self.display.show_warning_message("Broker offline\nUsing local name", duration=2)
-                except Exception:
-                    pass
-            else:
-                print("[KUBIOS] MQTT Broker connected")
-            
-            # Step 3: Get patient name via MQTT (30 second timeout)
-            if self.wifi.mqtt_client is not None:
-
-                if not hasattr(self, "_kubios_wait_start"):
-                    print("[KUBIOS] Waiting for patient name...")
-                    self._kubios_wait_start = time.time()
-
-                # non-blocking check
-                name = self.wifi.check_patient_name_message()
-
-            if name:
-                self.patient_name = name
-                print(f"[KUBIOS] Received patient name: {self.patient_name}")
-                self.display.show_success_message(f"Hello,\n{self.patient_name}", duration=2)
-                self._kubios_wait_start = None  # reset
-            
-            self.display.show_kubios_screen()
-            self.measurement.start_measurement()
-            self.measurement.set_collection_duration(30)
-            self.state_machine.state_changed = False
-        
-        # Process measurement
-        bpm = self.measurement.process_sample()
-        progress = self.measurement.get_collection_progress()
-        
-        if bpm:
-            self.display.update_collection_progress(bpm, progress)
-        
-        # When collection complete, send to Kubios
-        if self.measurement.is_collection_complete():
-            rr_intervals = self.measurement.get_rr_intervals()
-            self.display.show_message("Sending to\nKubios Cloud...")
-            
-            response = self.wifi.send_to_kubios(rr_intervals, self.patient_name)
-            
-            if response:
-                self.display.show_kubios_results(response)
-                self.storage.save_kubios_result(response, self.patient_name)
-                self.display.show_success_message("Kubios OK", duration=2)
-            else:
-                self.display.show_error_message("Kubios Failed", duration=2)
-            
+        # continuous update
+        result = self.kubios.update()
+        if result == "DONE":
             self.state_machine.change_state("MENU")
     
     def _handle_history_state(self):
