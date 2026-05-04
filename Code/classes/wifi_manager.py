@@ -21,6 +21,9 @@ class WiFiManager:
     """Handle network connectivity and message exchange."""
 
     def __init__(self):
+        self._kubios_initialized = False
+        self._kubios_name_received = False
+        self._kubios_wait_start = None
         self.ssid = getattr(cfg, "WIFI_SSID", "")
         self.password = getattr(cfg, "WIFI_PASSWORD", "")
         self.mqtt_broker = getattr(cfg, "MQTT_BROKER_IP", "")
@@ -120,7 +123,7 @@ class WiFiManager:
         except Exception:
                  msg_str = ""
         if topic_str == "":
-            print("[MQTT] EMPTY TOPIC AFTER DECODE → IGNORED")
+            print("[MQTT] EMPTY TOPIC AFTER DECODE IGNORED")
             return
         print("[MQTT] rx topic=%s msg=%s" % (topic_str, msg_str))
         if topic_str == self.topic_patient:
