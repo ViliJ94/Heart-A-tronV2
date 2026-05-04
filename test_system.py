@@ -193,11 +193,11 @@ class SystemTester:
         """Test configuration files"""
         self.print_header("CONFIGURATION TESTS")
         
-        # Check CONFIG.py
-        if os.path.exists("CONFIG.py"):
+        # Check Code/config.py
+        if os.path.exists("Code/config.py"):
             try:
                 # Check for required configuration variables
-                with open("CONFIG.py", 'r') as f:
+                with open("Code/config.py", 'r') as f:
                     content = f.read()
                     required_configs = [
                         "WIFI_SSID",
@@ -210,11 +210,11 @@ class SystemTester:
                         if config in content:
                             self.print_test(f"Config: {config}", "PASS")
                         else:
-                            self.print_test(f"Config: {config}", "FAIL", "Not found in CONFIG.py")
+                            self.print_test(f"Config: {config}", "FAIL", "Not found in Code/config.py")
             except Exception as e:
-                self.print_test("CONFIG.py", "FAIL", str(e))
+                self.print_test("Code/config.py", "FAIL", str(e))
         else:
-            self.print_test("CONFIG.py", "SKIP", "Not created (optional)")
+            self.print_test("Code/config.py", "FAIL", "Missing configuration file")
     
     # ─────────────────────────────────────────────────────────────────────────
     # DEPLOYMENT READINESS TESTS
