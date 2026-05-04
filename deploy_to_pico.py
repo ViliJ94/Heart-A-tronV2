@@ -16,10 +16,12 @@ class PicoDeployer:
     
     DIRECTORIES_TO_CREATE = [
         ":/classes",
-        ":/Data"
+        ":/Data",
+        ":/umqtt"
     ]
     
     FILES_TO_COPY = {
+        "Code/umqtt/simple.py": ":/umqtt/simple.py",
         "Code/Main.py": ":/main.py",
         "Code/ssd1306.py": ":/ssd1306.py",
         "Code/classes/display_manager.py": ":/classes/display_manager.py",
@@ -178,6 +180,34 @@ class PicoDeployer:
                 self.error_count += 1
                 self.errors.append(f"Failed to copy {source}: {e}")
     
+    def install_mip_packages(self):
+        """Install required MicroPython packages via mip"""
+        print("\n" + "="*70)
+        print("INSTALLING MICROPYTHON PACKAGES (mip)")
+        print("="*70 + "\n")
+        
+        packages = ["umqtt.simple"]
+        
+        for package in packages:
+            try:
+                print(f"Installing {package}...", end=" ")
+                result = self._run_mpremote("exec", f"import mip; mip.install('{package}')", timeout=30, retries=1)
+                
+                if result.returncode == 0:
+                    print("[OK]")
+                    self.success_count += 1
+                else:
+                    stderr = result.stderr.decode() if result.stderr else "Unknown error"
+                    print(f"[WARN] ({stderr})")
+                    if "mip" in stderr.lower() or "no module" in stderr.lower():
+                        print(f"  Note: mip may not be available in this MicroPython build")
+                        print(f"  Install {package} manually via: mpremote mip install {package}")
+                    
+            except subprocess.TimeoutExpired:
+                print("[WARN] (Timeout - mip may be unavailable)")
+            except Exception as e:
+                print(f"[WARN] ({e})")
+
     def copy_config_files(self):
         """Copy configuration files to Pico"""
         print("\n" + "="*70)
@@ -267,6 +297,9 @@ class PicoDeployer:
             return True
         else:
             print("\n[WARN] DEPLOYMENT COMPLETED WITH ERRORS")
+            print("\nIMPORTANT: If you see 'umqtt.simple not available' on Pico:")
+            print("  Try installing umqtt manually:")
+            print("    mpremote mip install umqtt.simple")
             print("\nTroubleshooting:")
             print("1. Ensure Pico W is connected via USB")
             print("2. Try restarting Pico (disconnect/reconnect USB)")
@@ -294,6 +327,9 @@ class PicoDeployer:
         
         # Copy config
         self.copy_config_files()
+        
+        # Install MicroPython packages
+        self.install_mip_packages()
         
         # Verify
         verified = self.verify_deployment()
