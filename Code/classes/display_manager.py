@@ -230,9 +230,9 @@ class DisplayManager:
 
     def show_history_details(self, entry):
         self._clear()
-        self._line("DETAIL", 0, 0)
-        self._line("Type: %s" % entry.get("type", "N/A"), 0, 14)
         self._line("HR: %s" % entry.get("mean_hr", entry.get("heart_rate", 0)), 0, 26)
+        self._line("PPI: %s" % entry.get("mean_ppi", entry.get("mean_ppi", 0)), 0, 14)
+        self._line("SDNN: %s" % entry.get("sdnn", entry.get("sdnn", 0)), 0, 26)
         self._line("RMSSD: %s" % entry.get("rmssd", "N/A"), 0, 38)
         self._line("SW1: Back", 0, 52)
         self._show()
