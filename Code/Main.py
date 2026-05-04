@@ -103,7 +103,6 @@ class HRMonitoringSystem:
                 self._safe_mode = True
                 print("[BOOT] Safe mode requested with BTN0")
                 break
-            time.sleep(0.05)
         
     def wait_for_patient_name(self):
         """Wait for patient name from PC companion app via MQTT"""
@@ -126,7 +125,6 @@ class HRMonitoringSystem:
                 print("[PATIENT] waiting for patient name... mqtt_client=", self.wifi.mqtt_client is not None,
                       "last_check_error=", self.wifi.last_mqtt_check_error)
                 next_debug_time += 5
-            time.sleep(0.1)
         
         print("[PATIENT] Timeout - using default name")
         self.patient_name = "Unknown_Patient"
