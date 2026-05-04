@@ -230,6 +230,12 @@ class MeasurementEngine:
                 return False
             rr_ms = peak_gap_ms
             bpm = int(60000 / rr_ms) if rr_ms > 0 else 0
+            if len(self.rr_intervals) > 0:
+                prev_rr = self.rr_intervals[-1]
+                if abs(rr_ms - prev_rr) > (prev_rr *  0.25):
+                    self._last_peak_ms = now_ms
+                    return True
+
             if self.min_hr <= bpm <= self.max_hr:
                 self.rr_intervals.append(rr_ms)
                 if len(self.rr_intervals) > self.max_rr:
