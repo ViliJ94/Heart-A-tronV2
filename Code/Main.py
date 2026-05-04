@@ -317,8 +317,19 @@ class HRMonitoringSystem:
             
             # Step 3: Get patient name via MQTT (30 second timeout)
             if self.wifi.mqtt_client is not None:
-                print("[KUBIOS] Waiting for patient name...")
-                self.wait_for_patient_name()
+
+                if not hasattr(self, "_kubios_wait_start"):
+                    print("[KUBIOS] Waiting for patient name...")
+                    self._kubios_wait_start = time.time()
+
+                # non-blocking check
+                name = self.wifi.check_patient_name_message()
+
+            if name:
+                self.patient_name = name
+                print(f"[KUBIOS] Received patient name: {self.patient_name}")
+                self.display.show_success_message(f"Hello,\n{self.patient_name}", duration=2)
+                self._kubios_wait_start = None  # reset
             
             self.display.show_kubios_screen()
             self.measurement.start_measurement()
