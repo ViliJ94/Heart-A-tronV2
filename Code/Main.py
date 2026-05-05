@@ -1,3 +1,4 @@
+
 import machine
 import time
 import json
@@ -67,6 +68,8 @@ class HRMonitoringSystem:
         """
         print("[BOOT] Grace period: press BTN0 for SAFE MODE")
         self.display.show_message("Booting...", "BTN0=Safe mode")
+        self.wifi.connect()
+        self.wifi._init_mqtt()
         start_time = time.time()
         last_log_ms = 0
         armed = False
@@ -163,7 +166,6 @@ class HRMonitoringSystem:
         current_state = self.state_machine.current_state
         
         if current_state == "INIT":
-            # Transition from INIT to MENU on first loop
             self.state_machine.change_state("MENU")
         elif current_state == "MENU":
             self._handle_menu_state()
@@ -173,6 +175,8 @@ class HRMonitoringSystem:
             self._handle_hrv_analysis_state()
         elif current_state == "KUBIOS":
             self._handle_kubios_state()
+            if result == "DONE":
+                self.state_machine.change_state("MENU")
         elif current_state == "HISTORY":
             self._handle_history_state()
     
@@ -267,14 +271,9 @@ class HRMonitoringSystem:
         # Check if collection is complete
         if self.measurement.is_collection_complete():
             hrv_data = self.measurement.calculate_hrv()
+            self.wifi.send_group4_results(self.patient_name, hrv_data)
             self.display.show_hrv_results(hrv_data)
-            
-            # Send HRV data via MQTT
-            self.wifi.send_hrv_data(self.patient_name, hrv_data)
-            
-            # Store locally
             self.storage.save_measurement(hrv_data, self.patient_name)
-            
             self.display.show_success_message("Data sent & stored", duration=2)
             self.state_machine.change_state("MENU")
     
@@ -346,15 +345,8 @@ class HRMonitoringSystem:
 
 
 def main():
-    """Entry point"""
-    print("\n" + "="*50)
-    print("Heart Rate Monitoring System - Level 5")
-    print("Raspberry Pi Pico W")
-    print("="*50 + "\n")
-    
     system = HRMonitoringSystem()
     system.run()
-
 
 if __name__ == "__main__":
     main()

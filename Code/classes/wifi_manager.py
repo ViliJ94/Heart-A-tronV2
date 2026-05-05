@@ -49,6 +49,8 @@ class WiFiManager:
         self.last_kubios_response = None
 
     def connect(self):
+        print("BROKER TEST CONNECT")
+        print(self.mqtt_client.connect("192.168.4.253", 21883))
         try:
             if self.wlan.isconnected():
                 self.connected = True
@@ -68,7 +70,12 @@ class WiFiManager:
         except Exception as exc:
             print("[WiFi] connect failed:", exc)
         return False
-
+    def poll(self):
+        if self.mqtt_client:
+            try:
+                self.mqtt_client.check_msg()
+            except:
+                pass
     def _init_mqtt(self):
         if self.mqtt_client:
             return True
@@ -309,3 +316,39 @@ class WiFiManager:
                 self.wlan.disconnect()
         except Exception:
             pass
+    def ensure_mqtt(self):
+        try:
+            if self.mqtt_client is None:
+                self.mqtt_client = self._connect_mqtt()
+            else:
+                # ping / test
+                self.mqtt_client.ping()
+        except:
+            self.mqtt_client = self._connect_mqtt()
+    def send_group4_results(self, patient_name, hrv_data):
+        """Send simplified HRV results to Group4 MQTT topic"""
+
+        if self.mqtt_client is None:
+            print("[MQTT] Cannot send Group4 results - no broker")
+            return False
+
+        try:
+            payload = {
+                "group": "Group4",
+                "patient": patient_name,
+                "mean_hr": int(hrv_data.get("mean_hr", 0)),
+                "rmssd": int(hrv_data.get("rmssd", 0)),
+                "sdnn": int(hrv_data.get("sdnn", 0)),
+                "ppi": int(hrv_data.get("mean_ppi", 0)),
+                "timestamp": self._get_timestamp(),
+                "device": self.device_id
+            }
+            self.ensure_mqtt()
+            self.mqtt_client.publish("Group4/Results", json.dumps(payload))
+
+            print("[MQTT] Group4 results sent")
+            return True
+        except Exception as e:
+            print(f"[MQTT ERROR] Failed to send Group4 results: {e}")
+            return False
+    

@@ -13,7 +13,7 @@ MQTT_TOPIC_KUBIOS_RESULTS = "kubios/results"
 MQTT_TOPIC_KUBIOS_REQUEST = "kubios/request"
 MQTT_TOPIC_DEVICE_STATUS = "device/status"
 DEVICE_ID = "pico_hrv_001"
-DEFAULT_PATIENT_NAME = "Unknown_Patient"
+DEFAULT_PATIENT_NAME = "PicoW_Group4"
 
 I2C_NUMBER = 1
 I2C_SCL_PIN = 15
