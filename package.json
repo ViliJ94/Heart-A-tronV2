@@ -1,0 +1,24 @@
+{
+  "urls": [
+    ["main.py", "http://localhost:8000/Code/Main.py"],
+    ["ssd1306.py", "http://localhost:8000/Code/ssd1306.py"],
+    ["simple.py", "http://localhost:8000/Code/umqtt/simple.py"],
+    ["config.py", "http://localhost:8000/Code/config.py"],
+    ["kubios_flow.py", "http://localhost:8000/Code/classes/kubios_flow.py"],
+    ["Reference_code/fifo.py","http://localhost:8000/Code/Reference_code/fifo.py"],
+    ["Reference_code/filefifo.py","http://localhost:8000/Code/Reference_code/filefifo.py"],
+    ["Reference_code/piotimer.py","http://localhost:8000/Code/Reference_code/piotimer.py"],
+    ["classes/display_manager.py", "http://localhost:8000/Code/classes/display_manager.py"],
+    ["classes/sensor_manager.py", "http://localhost:8000/Code/classes/sensor_manager.py"],
+    ["classes/wifi_manager.py", "http://localhost:8000/Code/classes/wifi_manager.py"],
+    ["classes/state_machine.py", "http://localhost:8000/Code/classes/state_machine.py"],
+    ["classes/measurement_engine.py", "http://localhost:8000/Code/classes/measurement_engine.py"],
+    ["classes/data_storage.py", "http://localhost:8000/Code/classes/data_storage.py"],
+    ["classes/graphics.py", "http://localhost:8000/Code/classes/graphics.py"],
+    ["classes/pio_adc_handler.py", "http://localhost:8000/Code/classes/pio_adc_handler.py"],
+    ["classes/__init__.py", "http://localhost:8000/Code/classes/__init__.py"]
+  ],
+  "deps": [
+  ],
+  "version": "0.1"
+}
