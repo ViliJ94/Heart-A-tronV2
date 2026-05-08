@@ -3,6 +3,10 @@ Yeah, that broke because the code block got split. Here’s a **clean fixed vers
 ```markdown
 # Pico Heart Rate Monitoring System
 
+## Note on Commit History
+Initial development was conducted via Notion, with the code base being migrated to this repository as a consolidated assembly later in the project. Consequently, commit statistics do not accurately reflect the individual contributions or the timeline of early development phase.
+Initial responsibilities: Matias - UI, menu ,and history. Vili: data handling, wifi, kubios, debugging, and HRV algorithm refinement. Oleksandr: system logic & architecture, data comparison, wifi, kubios, transition state, and debugging.
+
 ## Overview
 The Pico Heart Rate Monitoring System is a compact embedded project built around the Raspberry Pi Pico W. It reads physiological data using a PPG sensor and processes it directly on the device using MicroPython. The system calculates heart rate (BPM) and heart rate variability (HRV), then displays the results on an SSD1306 OLED screen while also communicating with a companion PC application over MQTT.
 

@@ -15,7 +15,7 @@ class KubiosFlow:
 
         self.reset()
 
-        # UI throttle (чтобы не ддосить дисплей)
+        # UI throttle: To avoid overwhelming the display
         self._last_ui_update = 0
 
     def reset(self):
