@@ -1,4 +1,3 @@
-Yeah, that broke because the code block got split. Here’s a **clean fixed version** with proper Markdown formatting:
 
 ```markdown
 # Pico Heart Rate Monitoring System
